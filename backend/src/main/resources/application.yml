@@ -1,0 +1,69 @@
+# PulseOps backend — base configuration.
+# Every environment-specific value comes from environment variables.
+# All variables are documented in deployment/.env.example and docs/DEVELOPMENT.md.
+
+spring:
+  application:
+    name: pulseops-backend
+  datasource:
+    url: ${PULSEOPS_DB_URL:jdbc:postgresql://localhost:5432/pulseops}
+    username: ${PULSEOPS_DB_USER:pulseops_app}
+    password: ${PULSEOPS_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${PULSEOPS_DB_POOL_SIZE:10}
+  jpa:
+    hibernate:
+      ddl-auto: validate   # schema is owned by Flyway (ADR-003); never create/update
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+pulseops:
+  security:
+    jwt:
+      # HMAC secret for access tokens; MUST be set per environment (>= 32 bytes, base64).
+      secret: ${PULSEOPS_JWT_SECRET:}
+      access-token-ttl: ${PULSEOPS_JWT_ACCESS_TTL:15m}
+      refresh-token-ttl: ${PULSEOPS_JWT_REFRESH_TTL:14d}
+  ml:
+    base-url: ${PULSEOPS_ML_URL:http://localhost:8500}
+    shared-secret: ${PULSEOPS_ML_SECRET:}
+  ingest:
+    max-payload-bytes: ${PULSEOPS_INGEST_MAX_BYTES:1048576}
+    max-batch-events: ${PULSEOPS_INGEST_MAX_BATCH:500}
+
+server:
+  port: ${PULSEOPS_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+---
+# Lightweight local development profile (dev-lite): verbose errors, dev mail mode.
+spring:
+  config:
+    activate:
+      on-profile: dev
+  jpa:
+    properties:
+      hibernate.format_sql: true
+
+pulseops:
+  mail:
+    # Development email-verification mode: verification links are logged,
+    # not sent. Documented in docs/DEVELOPMENT.md. Never enable in production.
+    dev-log-only: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+pulseops:
+  mail:
+    dev-log-only: false

@@ -1,0 +1,33 @@
+# Java
+backend/target/
+examples/**/target/
+*.class
+
+# Node
+node_modules/
+frontend/dist/
+*.local
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+ml-service/models/*.joblib
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env & secrets — never commit real configuration
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
