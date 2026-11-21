@@ -57,8 +57,10 @@ class IngestServiceTest {
     private final TelemetryProcessor processor = mock(TelemetryProcessor.class);
     private final TransactionTemplate tx = mock(TransactionTemplate.class);
     private final MutableClock clock = MutableClock.startingAt("2026-11-21T12:00:00Z");
-    private final IngestService ingest = new IngestService(authenticator, projects, services, connections, reception,
-            processor, new ObjectMapper(), tx, clock, TestProperties.defaults());
+    private final IngestService ingest = new IngestService(authenticator,
+            new IngestTargetResolver(projects, services, connections, tx),
+            new IngestRateLimiter(TestProperties.defaults(), clock), reception, processor, new ObjectMapper(), clock,
+            TestProperties.defaults());
 
     private final UUID orgId = UUID.randomUUID();
     private Project project;

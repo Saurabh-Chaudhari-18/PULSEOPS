@@ -168,6 +168,23 @@ Connection status: `NOT_CONNECTED` → `WAITING_FOR_DATA` (method chosen) → `C
 
 **Privacy:** attributes whose names indicate secrets (password, token, authorization, cookie, API key, card number, CVV, …) are stored as `[REDACTED]`; bearer tokens, JWTs, PulseOps keys, URL credentials, `password=…` pairs and Luhn-valid card numbers are scrubbed from all text.
 
+## Telemetry ingestion — OpenTelemetry OTLP/HTTP (integration key)
+
+`POST /otlp/v1/traces`, `POST /otlp/v1/logs`, `POST /otlp/v1/metrics` — the standard OTLP/HTTP paths, so exporters only need `OTEL_EXPORTER_OTLP_ENDPOINT=<ingest-base-url>/otlp`. Same key headers and security chain as REST.
+
+| Aspect | Behaviour |
+|---|---|
+| Encoding | **Binary protobuf only** (`Content-Type: application/x-protobuf`). OTLP/JSON and gRPC are not supported (415 with a hint to set `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`) |
+| Compression | `Content-Encoding: gzip` or none. Compressed body ≤ `PULSEOPS_INGEST_MAX_BYTES` (1 MiB default); decompressed ≤ 16 MiB (decompression bombs → 413) |
+| Service | Service-scoped key: everything goes to the key's service, whatever `service.name` says. Project-wide key: each resource's `service.name` must name an existing service of the project (case-insensitive) |
+| Spans | IDs must be 16/8 bytes and non-zero; start time within −7 days / +5 minutes. Stored in `distributed_traces`; a retried span (same tenant + trace + span ID) is ignored |
+| Derived data | SERVER spans with an HTTP method → API request metrics (route from `http.route`, else templated `url.path`); spans with `db.system[.name]` → `database_operations` (statement sanitized to its shape); `exception` span events → ERROR logs linked to the trace |
+| Logs | Severity number (or text) → TRACE…FATAL; body redacted, ≤ 8000 chars; trace/span IDs kept for correlation |
+| Metrics | Downsampled to one row per (metric, attribute set, minute): count/sum/min/max/last. Gauges and sums keep values; histograms/summaries keep count, sum, min, max. ≤ 2000 series per request (extra points rejected) |
+| Attributes | ≤ 64 per item; keys ≤ 128, strings ≤ 1000 (stack traces ≤ 16000); SQL attributes sanitized; secret-like keys `[REDACTED]`; `process.command_line`/`process.command_args` dropped |
+
+**Responses:** **200** with `Export{Trace,Logs,Metrics}ServiceResponse`. Items that cannot be accepted individually — invalid IDs, out-of-window timestamps, or (project-wide keys) a resource naming an unknown/archived/disabled service while other resources are fine — are reported in `partial_success` (`rejected_spans` / `rejected_log_records` / `rejected_data_points` + `error_message`) so exporters log rather than retry them. Whole-request failures return a protobuf **`google.rpc.Status`** body: 400 `MALFORMED_PROTOBUF` / `MALFORMED_GZIP`, 401 key errors, 403 project/scope errors, 404 `UNKNOWN_SERVICE` (when no resource could be attributed), 413, 415, 429 and 503 (both with `Retry-After: 30`).
+
 ---
 
-*Pending:* OTLP/HTTP receiver at `/otlp/v1/traces|metrics|logs` (Phase 7); monitoring query APIs (Phases 9–11).
+*Pending:* monitoring query APIs (Phases 9–11).

@@ -162,7 +162,8 @@ public class EventNormalizer {
         return new TelemetryEvent.Http(normalizeMethod(e.httpMethod()), route, status, duration);
     }
 
-    static String normalizeMethod(String method) {
+    /** GET, POST, … or OTHER for unknown or missing methods (api_metrics.http_method CHECK). */
+    public static String normalizeMethod(String method) {
         if (method == null) {
             return "OTHER";
         }

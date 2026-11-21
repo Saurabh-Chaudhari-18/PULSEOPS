@@ -18,7 +18,10 @@ import jakarta.servlet.http.Cookie;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pulseops.common.tenancy.TenantContext;
+import com.pulseops.testsupport.OtlpTestData;
 import com.pulseops.testsupport.TestProperties;
+
+import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceResponse;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -155,6 +158,95 @@ class FullJourneyIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content(batch))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIAL"));
+    }
+
+    @Test
+    void openTelemetryJavaAgentExportsBecomeTracesLogsDbCallsAndMetrics() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        Session carol = registerAndLogin("carol-" + suffix + "@it.test");
+        String orgId = field(call(carol, post("/api/v1/organizations"),
+                "{\"name\":\"Otel " + suffix + "\"}", 201), "id");
+        String projectId = field(call(carol, post("/api/v1/organizations/" + orgId + "/projects"),
+                "{\"name\":\"Shop\",\"environment\":\"production\"}", 201), "id");
+        String serviceId = field(call(carol, post("/api/v1/organizations/" + orgId + "/projects/" + projectId
+                + "/services"), "{\"name\":\"checkout\",\"technology\":\"java_spring_boot\"}", 201), "id");
+        String integrationPath = "/api/v1/organizations/" + orgId + "/services/" + serviceId + "/integration";
+        call(carol, put(integrationPath), "{\"type\":\"JAVA_AGENT\"}", 200);
+        JsonNode guide = body(call(carol, get(integrationPath + "/instructions?type=JAVA_AGENT"), null, 200));
+        assertThat(guide.get("available").asBoolean()).isTrue();
+        String key = body(call(carol, post("/api/v1/organizations/" + orgId + "/projects/" + projectId
+                + "/credentials"), "{\"name\":\"agent key\"}", 201)).get("key").asText();
+
+        // 1. Traces (gzip, as configured by the guide). One resource names a service that does not exist.
+        Instant start = Instant.now().minusSeconds(30).truncatedTo(ChronoUnit.MILLIS);
+        byte[] traces = OtlpTestData.traces(
+                OtlpTestData.orderRequest(OtlpTestData.javaAgentResource("checkout"), start),
+                OtlpTestData.orderRequest(OtlpTestData.javaAgentResource("ghost"), start)).toByteArray();
+        MvcResult exported = mvc.perform(post("/otlp/v1/traces").header("X-PulseOps-Key", key)
+                        .header("Content-Encoding", "gzip")
+                        .contentType("application/x-protobuf").content(OtlpTestData.gzip(traces)))
+                .andExpect(status().isOk())
+                .andReturn();
+        ExportTraceServiceResponse traceResponse =
+                ExportTraceServiceResponse.parseFrom(exported.getResponse().getContentAsByteArray());
+        assertThat(traceResponse.getPartialSuccess().getRejectedSpans()).isEqualTo(2);
+        assertThat(traceResponse.getPartialSuccess().getErrorMessage()).contains("ghost");
+
+        // 2. Logs and metrics.
+        mvc.perform(post("/otlp/v1/logs").header("X-PulseOps-Key", key).contentType("application/x-protobuf")
+                        .content(OtlpTestData.logs(OtlpTestData.javaAgentResource("checkout"), start).toByteArray()))
+                .andExpect(status().isOk());
+        Instant minute = start.truncatedTo(ChronoUnit.MINUTES);
+        mvc.perform(post("/otlp/v1/metrics").header("X-PulseOps-Key", key).contentType("application/x-protobuf")
+                        .content(OtlpTestData.metrics(OtlpTestData.javaAgentResource("checkout"), minute)
+                                .toByteArray()))
+                .andExpect(status().isOk());
+
+        // 3. Wire-format errors are protobuf google.rpc.Status bodies; JSON is refused.
+        mvc.perform(post("/otlp/v1/traces").header("X-PulseOps-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnsupportedMediaType());
+        mvc.perform(post("/otlp/v1/traces").header("X-PulseOps-Key", "po_" + "A".repeat(43))
+                        .contentType("application/x-protobuf").content(traces))
+                .andExpect(status().isUnauthorized())
+                .andExpect(result -> assertThat(result.getResponse().getContentType())
+                        .startsWith("application/x-protobuf"));
+
+        // 4. The agent's data is processed; the service becomes CONNECTED.
+        String connection = null;
+        for (int i = 0; i < 50 && !"CONNECTED".equals(connection); i++) {
+            Thread.sleep(200);
+            connection = body(call(carol, get(integrationPath), null, 200)).get("status").asText();
+        }
+        assertThat(connection).isEqualTo("CONNECTED");
+
+        // 5. A retried export (same span IDs) does not duplicate spans.
+        mvc.perform(post("/otlp/v1/traces").header("X-PulseOps-Key", key).contentType("application/x-protobuf")
+                        .content(OtlpTestData.traces(OtlpTestData.orderRequest(
+                                OtlpTestData.javaAgentResource("checkout"), start)).toByteArray()))
+                .andExpect(status().isOk());
+        Thread.sleep(1000);
+
+        UUID org = UUID.fromString(orgId);
+        UUID svc = UUID.fromString(serviceId);
+        TenantContext.callInOrganization(org, () -> {
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM distributed_traces WHERE service_id = ?",
+                    Long.class, svc)).as("2 spans, retry deduplicated").isEqualTo(2L);
+            assertThat(jdbc.queryForObject("SELECT attributes->>'http.request.header.authorization' "
+                    + "FROM distributed_traces WHERE service_id = ? AND kind = 'SERVER'", String.class, svc))
+                    .isEqualTo("[REDACTED]");
+            assertThat(jdbc.queryForObject("SELECT operation FROM database_operations WHERE service_id = ? LIMIT 1",
+                    String.class, svc)).isEqualTo("SELECT * FROM orders WHERE id = ?");
+            assertThat(jdbc.queryForObject("SELECT sum(error_count) FROM api_metrics WHERE service_id = ? "
+                    + "AND route_template = '/orders/{id}'", Long.class, svc)).isPositive();
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM application_logs WHERE service_id = ? "
+                    + "AND message LIKE 'java.sql.SQLTransientConnectionException%'", Long.class, svc)).isPositive();
+            assertThat(jdbc.queryForObject("SELECT message FROM application_logs WHERE service_id = ? AND level = 'WARN'",
+                    String.class, svc)).isEqualTo("Payment retry for card [REDACTED]");
+            assertThat(jdbc.queryForObject("SELECT sample_count FROM metric_points WHERE service_id = ? "
+                    + "AND name = 'jvm.memory.used'", Long.class, svc)).isEqualTo(2L);
+            return null;
+        });
     }
 
     @Test

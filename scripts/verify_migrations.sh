@@ -154,6 +154,66 @@ DO $$ BEGIN
   IF pulseops_histogram_add('{1,2,3}', '{10,20}') <> '{11,22,3}'::bigint[] THEN RAISE EXCEPTION 'histogram add wrong'; END IF;
 END $$;
 
+-- V11 OTLP: span IDs are unique per tenant (another tenant reusing an ID must not be blocked),
+-- a retried span is ignored, metric aggregates merge, and metric_points is tenant-isolated.
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000b';
+INSERT INTO projects (id,organization_id,name)
+ VALUES ('30000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-00000000000b','PB');
+INSERT INTO services (id,organization_id,project_id,name)
+ VALUES ('40000000-0000-0000-0000-00000000000b','20000000-0000-0000-0000-00000000000b','30000000-0000-0000-0000-000000000002','svc-b');
+INSERT INTO distributed_traces (organization_id,service_id,trace_id,span_id,name,start_time,duration_ms)
+ VALUES ('20000000-0000-0000-0000-00000000000b','40000000-0000-0000-0000-00000000000b',
+         '4bf92f3577b34da6a3ce929d0e0e4736','00f067aa0ba902b7','b-span',now(),1);
+COMMIT;
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000a';
+INSERT INTO services (id,organization_id,project_id,name)
+ VALUES ('40000000-0000-0000-0000-00000000000a','20000000-0000-0000-0000-00000000000a','30000000-0000-0000-0000-000000000001','svc-a');
+INSERT INTO distributed_traces (organization_id,service_id,trace_id,span_id,name,start_time,duration_ms)
+ VALUES ('20000000-0000-0000-0000-00000000000a','40000000-0000-0000-0000-00000000000a',
+         '4bf92f3577b34da6a3ce929d0e0e4736','00f067aa0ba902b7','a-span',now(),1)
+ ON CONFLICT (organization_id, trace_id, span_id) DO NOTHING;
+INSERT INTO distributed_traces (organization_id,service_id,trace_id,span_id,name,start_time,duration_ms)
+ VALUES ('20000000-0000-0000-0000-00000000000a','40000000-0000-0000-0000-00000000000a',
+         '4bf92f3577b34da6a3ce929d0e0e4736','00f067aa0ba902b7','a-retry',now(),1)
+ ON CONFLICT (organization_id, trace_id, span_id) DO NOTHING;
+DO $$ BEGIN
+  IF (SELECT string_agg(name, ',') FROM distributed_traces) IS DISTINCT FROM 'a-span' THEN
+    RAISE EXCEPTION 'span uniqueness wrong: expected only tenant A''s first span';
+  END IF;
+END $$;
+INSERT INTO metric_points (organization_id,service_id,name,unit,kind,attributes,attributes_key,bucket_start,
+                           sample_count,value_sum,value_min,value_max,value_last)
+ VALUES ('20000000-0000-0000-0000-00000000000a','40000000-0000-0000-0000-00000000000a','jvm.memory.used','By',
+         'gauge','{"jvm.memory.type":"heap"}','jvm.memory.type=heap','2026-11-21 10:00:00+00',2,300,100,200,200);
+INSERT INTO metric_points (organization_id,service_id,name,unit,kind,attributes,attributes_key,bucket_start,
+                           sample_count,value_sum,value_min,value_max,value_last)
+ VALUES ('20000000-0000-0000-0000-00000000000a','40000000-0000-0000-0000-00000000000a','jvm.memory.used','By',
+         'gauge','{"jvm.memory.type":"heap"}','jvm.memory.type=heap','2026-11-21 10:00:00+00',1,50,50,50,NULL)
+ ON CONFLICT (service_id, name, attributes_key, bucket_start) DO UPDATE SET
+   sample_count = metric_points.sample_count + EXCLUDED.sample_count,
+   value_sum    = metric_points.value_sum + EXCLUDED.value_sum,
+   value_min    = LEAST(metric_points.value_min, EXCLUDED.value_min),
+   value_max    = GREATEST(metric_points.value_max, EXCLUDED.value_max),
+   value_last   = COALESCE(EXCLUDED.value_last, metric_points.value_last);
+DO $$ BEGIN
+  IF (SELECT format('%s/%s/%s/%s/%s', sample_count, value_sum, value_min, value_max, value_last) FROM metric_points)
+     IS DISTINCT FROM '3/350/50/200/200' THEN
+    RAISE EXCEPTION 'metric merge wrong: %', (SELECT format('%s/%s/%s/%s/%s', sample_count, value_sum, value_min, value_max, value_last) FROM metric_points);
+  END IF;
+END $$;
+COMMIT;
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000b';
+DO $$ BEGIN
+  IF (SELECT count(*) FROM metric_points) <> 0 THEN RAISE EXCEPTION 'RLS breach: metric_points cross-tenant'; END IF;
+  IF (SELECT string_agg(name, ',') FROM distributed_traces) IS DISTINCT FROM 'b-span' THEN
+    RAISE EXCEPTION 'tenant B span missing or foreign span visible';
+  END IF;
+END $$;
+COMMIT;
+
 -- Seed catalog present.
 DO $$ BEGIN
   IF (SELECT count(*) FROM permissions) < 11 THEN RAISE EXCEPTION 'permissions seed missing'; END IF;

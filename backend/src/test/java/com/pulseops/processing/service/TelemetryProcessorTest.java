@@ -87,6 +87,27 @@ class TelemetryProcessorTest {
     }
 
     @Test
+    void otlpBatchesStoreSpansLogsDbOperationsAndMetricsAndAggregateDerivedRequests() {
+        TelemetryEvent derived = new TelemetryEvent(EventType.PERFORMANCE, "GET /orders/{id}", now, Map.of(),
+                new TelemetryEvent.Http("GET", "/orders/{id}", 500, 120), null, null, null, null);
+        IngestBatch batch = new IngestBatch(UUID.randomUUID(), orgId, UUID.randomUUID(), serviceId,
+                UUID.randomUUID(), IntegrationType.JAVA_AGENT, now, List.of(), List.of(derived),
+                List.of(), List.of(), List.of(), List.of());
+
+        processor.process(batch);
+
+        InOrder order = inOrder(store, reception);
+        order.verify(store).mergeApiMetrics(eq(batch), argThat(aggs -> aggs.size() == 1));
+        order.verify(store).saveErrorLogs(eq(batch), argThat(errors -> errors.isEmpty()));
+        order.verify(store).saveSpans(batch);
+        order.verify(store).saveLogs(batch);
+        order.verify(store).saveDbOperations(batch);
+        order.verify(store).mergeMetricPoints(batch);
+        order.verify(reception).recordReceived(orgId, serviceId, IntegrationType.JAVA_AGENT, now);
+        assertThat(processor.stats().processed()).isEqualTo(1);
+    }
+
+    @Test
     void submitIsRefusedUntilStarted() {
         assertThat(processor.submit(batch(List.of()))).isFalse();
     }

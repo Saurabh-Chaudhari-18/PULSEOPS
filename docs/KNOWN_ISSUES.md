@@ -13,8 +13,13 @@
 | 9 | Access tokens | Cannot be revoked before their 15-minute expiry. Disabled users keep working access tokens until expiry, but lose organization access immediately on removal (membership is checked per request). | BY DESIGN |
 | 10 | Frontend | Auth/onboarding screens are not built yet (frontend build blocked by #1). | PLANNED |
 | 11 | Ingestion durability | The processing queue is in memory: batches accepted (202) but not yet processed are lost if the backend crashes (ADR-016). Graceful shutdown drains up to 20 s. | BY DESIGN (v1) — durable outbox planned |
-| 12 | Ingestion | Compressed bodies (`Content-Encoding: gzip`) are rejected with 415. OpenTelemetry exporters default to no compression for OTLP/HTTP, but this must be supported for OTLP in Phase 7. | PLANNED (Phase 7) |
+| 12 | Ingestion | ~~gzip unsupported~~ — the OTLP receiver accepts `Content-Encoding: gzip` with a 16 MiB decompression cap. The REST endpoint still accepts only uncompressed JSON (415 otherwise). | RESOLVED for OTLP; REST unchanged |
 | 13 | Ingestion | Per-key rate limiting and credential `last_used_at` throttling are per instance (in-memory). | OPEN (Phase 17) |
-| 14 | Integrations | Java-agent and OTLP integration instructions are returned with `available=false` until the OTLP receiver exists. | PLANNED (Phase 7) |
+| 14 | Integrations | ~~Java-agent/OTLP guides unavailable~~ — enabled with the Phase 7 receiver; guides now set `http/protobuf` and gzip. | RESOLVED |
 | 15 | Metrics | Error rate counts only 5xx as errors (4xx are client errors). Documented; configurable per alert rule later. | BY DESIGN |
 | 16 | Verification | ~~Phase 4–6 tests not executed~~ — all executed and passing on the developer PC, including the DB-backed end-to-end test. | RESOLVED |
+| 17 | OTLP | Only OTLP/HTTP with binary protobuf is accepted. OTLP/gRPC and OTLP/JSON exporters get 415 (ADR-019). | BY DESIGN (v1) |
+| 18 | OTLP metrics | Metrics are stored as one-minute aggregates (count/sum/min/max/last per series); histogram bucket boundaries, exemplars and per-instance identity (`service.instance.id`) are not kept, so two instances of a service reporting the same gauge are averaged together. Cumulative sums are stored as reported (no delta conversion). | BY DESIGN (v1) — revisit with metric dashboards (Phase 9) |
+| 19 | OTLP retries | Exporter retries deduplicate spans (ADR-018) but derived request metrics, DB operations and logs from a retried export are stored again. A request split across several services can be half-queued if the queue fills between batches (503 → retry). | ACCEPTED — see ADR-018 |
+| 20 | OTLP size | The compressed body limit is shared with REST (1 MiB default). Very large uncompressed agent exports may hit 413; the guides enable gzip, and `PULSEOPS_INGEST_MAX_BYTES` can be raised. | DOCUMENTED |
+| 21 | OTLP verification | The protobuf-reading code (`OtlpDecoder`, `OtlpIngestService`, `OtlpController`) and its JUnit tests compile only with Maven; they are checked offline for syntax and internal references but not yet compiled against the protobuf bindings. | OPEN — run on the developer PC |

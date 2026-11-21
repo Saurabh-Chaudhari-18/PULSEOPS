@@ -18,7 +18,7 @@ never edit an applied migration — add a new one.
 |---|---|
 | Identity | `users`, `organizations`, `organization_members`, `roles`, `permissions`, `role_permissions`, `refresh_tokens`, `user_action_tokens` |
 | Application mgmt | `projects`, `services`, `integration_credentials`, `integration_connections` |
-| Telemetry | `telemetry_events`, `api_metrics` (1-min aggregates), `application_logs`, `distributed_traces` (spans), `database_operations` |
+| Telemetry | `telemetry_events`, `api_metrics` (1-min aggregates), `application_logs`, `distributed_traces` (spans, unique per tenant + trace + span ID), `database_operations`, `metric_points` (OTLP metrics, 1-min aggregates per series) |
 | Intelligence | `anomalies`, `incidents`, `incident_anomalies`, `incident_recommendations`, `incident_comments`, `incident_events` |
 | Alerting | `alert_rules`, `alert_notifications` |
 | Administration | `audit_logs`, `data_retention_policies` |
@@ -49,9 +49,15 @@ Highlights:
 - `api_metrics.duration_buckets bigint[]` + `pulseops_histogram_add(a, b)` and aggregate `pulseops_histogram_sum(bigint[])` (ADR-014). Merging upsert: `ON CONFLICT (...) DO UPDATE SET duration_buckets = pulseops_histogram_add(api_metrics.duration_buckets, EXCLUDED.duration_buckets)`.
 - `integration_credentials_project_idx` for listing keys per project.
 
+
+## V11 — OTLP support
+
+- `distributed_traces`: the global `UNIQUE (trace_id, span_id)` becomes `UNIQUE (organization_id, trace_id, span_id)` (ADR-018); span writes use `ON CONFLICT DO NOTHING`, so exporter retries are idempotent and tenants cannot block each other's IDs.
+- `metric_points`: one row per (service, metric name, canonical attribute key, minute bucket) with `sample_count`, `value_sum`, `value_min`, `value_max`, `value_last`; kind ∈ gauge/sum/histogram/summary. Writes merge with an upsert (counts and sums add, min/max widen, last is replaced when present). FORCE RLS `tenant_isolation`; included in `data_retention_policies`.
+
 ## Verification
 
-`scripts/verify_migrations.sh` recreates a scratch DB, applies all migrations **as the non-superuser app role**, and asserts: seed catalog, cross-tenant write rejected, cross-tenant read empty, no-context fail-closed, user-scoped membership visibility, no joining foreign organizations via user context, removed members losing visibility. Run it after every schema change. Includes V10 checks (credential row visible only with its hash, setting cleared at commit, no writes via hash context, histogram addition). Migrations are applied in numeric version order like Flyway. Last run: 2026-11-21, PostgreSQL 16.15, V1–V10 — PASS.
+`scripts/verify_migrations.sh` recreates a scratch DB, applies all migrations **as the non-superuser app role**, and asserts: seed catalog, cross-tenant write rejected, cross-tenant read empty, no-context fail-closed, user-scoped membership visibility, no joining foreign organizations via user context, removed members losing visibility. Run it after every schema change. Includes V10 checks (credential row visible only with its hash, setting cleared at commit, no writes via hash context, histogram addition) and V11 checks (per-tenant span uniqueness and retry idempotence, metric upsert arithmetic, `metric_points` isolation). Migrations are applied in numeric version order like Flyway. Last run: 2026-11-21, PostgreSQL 16.15, V1–V11 — PASS.
 
 `TenantIsolationIntegrationTest` (backend) repeats the core checks through the real `TenantAwareDataSource` over a one-connection pool when `PULSEOPS_TEST_DB_URL` is set.
 

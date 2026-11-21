@@ -50,7 +50,7 @@ public class IngestController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(accepted);
     }
 
-    static String extractKey(String keyHeader, String authorization) {
+    public static String extractKey(String keyHeader, String authorization) {
         if (keyHeader != null && !keyHeader.isBlank()) {
             return keyHeader.trim();
         }

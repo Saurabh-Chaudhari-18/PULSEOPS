@@ -72,22 +72,31 @@ public class TelemetryProcessor implements SmartLifecycle {
         try {
             tx.executeWithoutResult(status -> {
                 store.saveEvents(batch);
-                store.mergeApiMetrics(batch, ApiMetricAggregator.aggregate(batch.events()));
+                store.mergeApiMetrics(batch, ApiMetricAggregator.aggregate(batch.requestsForAggregation()));
                 List<TelemetryEvent> errors = batch.events().stream()
                         .filter(e -> e.type() == EventType.ERROR)
                         .toList();
                 store.saveErrorLogs(batch, errors);
+                store.saveSpans(batch);
+                store.saveLogs(batch);
+                store.saveDbOperations(batch);
+                store.mergeMetricPoints(batch);
                 reception.recordReceived(batch.organizationId(), batch.serviceId(), batch.source(),
                         batch.receivedAt());
             });
             processed.incrementAndGet();
         } catch (RuntimeException e) {
             failed.incrementAndGet();
-            log.error("Failed to process telemetry batch {} ({} events) for service {}", batch.batchId(),
-                    batch.events().size(), batch.serviceId(), e);
+            log.error("Failed to process telemetry batch {} ({} items) for service {}", batch.batchId(),
+                    batch.size(), batch.serviceId(), e);
         } finally {
             TenantContext.clear();
         }
+    }
+
+    /** Free queue slots; used to refuse a multi-batch request up front instead of half-accepting it. */
+    public int remainingCapacity() {
+        return queue.remainingCapacity();
     }
 
     public Stats stats() {

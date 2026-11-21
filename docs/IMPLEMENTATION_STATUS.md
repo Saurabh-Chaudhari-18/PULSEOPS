@@ -15,7 +15,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 4 | Projects, Services and Integration Management | COMPLETED |
 | 5 | API Credentials and Integration Onboarding | COMPLETED |
 | 6 | REST Telemetry Ingestion | COMPLETED |
-| 7 | OpenTelemetry OTLP Ingestion | NOT STARTED |
+| 7 | OpenTelemetry OTLP Ingestion | IMPLEMENTED — awaiting PC build/test run |
 | 8 | Java Sample Application Integration | NOT STARTED |
 | 9 | Application and API Monitoring | NOT STARTED |
 | 10 | Database Monitoring | NOT STARTED |
@@ -138,4 +138,23 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Acceptance (pending build):** sample batch → 202 → rows in `telemetry_events`/`api_metrics`/`application_logs` → service CONNECTED; revoked/expired/invalid keys 401; oversize 413; invalid events 400 with field paths; cross-service/tenant writes impossible.
 
-**Next:** Phase 7 (OTLP/HTTP protobuf receiver — needs the `opentelemetry-proto` dependency, so it requires a working Maven build to do properly) or Phase 12 (Python anomaly detection — fully testable here now).
+## Phase 7 — OpenTelemetry OTLP Ingestion — IMPLEMENTED, awaiting PC build (2026-11-21)
+
+**Completed (code):** OTLP/HTTP binary-protobuf receiver at `/otlp/v1/traces|logs|metrics` (ADR-019) using `io.opentelemetry.proto:opentelemetry-proto:1.5.0-alpha`.
+- `otlp.decode`: `OtlpPayload` (identity/gzip, 16 MiB decompression cap), `OtlpDecoder` (ID/timestamp validation, AnyValue conversion, kind/status mapping, per-resource grouping).
+- `otlp.mapping` (protobuf-free): `OtlpAttributes` (limits, redaction, SQL sanitizing, command-line dropping), `SqlSanitizer`, `SpanAnalyzer` (SERVER span → API request; DB client span → `database_operations`; `exception` events → ERROR logs; old and new semantic conventions), `LogLevels`, `MetricPointAggregator` (one-minute series, 2000-series cap).
+- `otlp.service.OtlpIngestService`: key auth + shared per-key rate limit, resource → service attribution (service-scoped vs project-wide keys, never auto-create), one batch per service, queue-capacity check, `partial_success` reporting, Java-agent source detection.
+- `otlp.api`: `OtlpController` (protobuf-only, `google.rpc.Status` errors, `Retry-After`), `OtlpStatus`.
+- Shared with REST: `IngestTargetResolver` and `IngestRateLimiter` extracted from `IngestService`; `IngestBatch` extended with spans/logs/DB operations/metric points; `TelemetryStore` gained `saveSpans`, `saveLogs`, `saveDbOperations`, `mergeMetricPoints`.
+- Migration **V11**: per-tenant span uniqueness (ADR-018), `metric_points` table with RLS and retention entry.
+- Java-agent and OTLP installation guides enabled (gzip + `http/protobuf`).
+
+**Tests executed (cloud)**
+- ✅ `verify_migrations.sh` on PostgreSQL 16 with new V11 assertions: same trace/span ID accepted for two tenants, retry ignored within a tenant, metric merge (`3/350/50/200/200`), `metric_points` isolated by RLS.
+- ✅ All four new store statements `PREPARE`d and executed on PostgreSQL (types and CHECK constraints satisfied).
+- ✅ Compiled and executed (JDK-only, real JUnit test sources with a minimal runner): `OtlpMappingTest` (52 assertions), `OtlpPayloadTest` (6, incl. 48 KB → 50 MB gzip bomb stopped), `OtlpStatusTest` (12, wire bytes checked by hand).
+- ✅ Offline javac checks over 183 files: no errors except absent external libraries.
+
+**Pending on the PC (needs Maven):** `OtlpDecoderTest`, `OtlpIngestServiceTest`, updated `TelemetryProcessorTest`, and the new end-to-end test `FullJourneyIntegrationTest.openTelemetryJavaAgentExportsBecomeTracesLogsDbCallsAndMetrics` (gzip trace export with partial rejection, logs, metrics, protobuf errors, CONNECTED, span dedupe, redaction and stored rows checked under RLS).
+
+**Next:** Phase 8 (sample Spring Boot application instrumented with the Java agent) or Phase 12 (Python anomaly detection — fully testable here).

@@ -105,3 +105,16 @@ Short, dated records of decisions that shape the system. Newest last.
 **Decision:** Authentication, scope resolution and full event validation happen synchronously; only valid batches get 202. Telemetry naming an unknown service is rejected (404 `UNKNOWN_SERVICE`) rather than creating it.
 
 **Why:** Clients get precise, actionable errors at send time instead of silent drops later. Auto-creating services from telemetry would let a misconfigured or compromised sender pollute a tenant's service catalog and bypass the project's management permissions.
+
+## ADR-018 — Span uniqueness is per tenant (2026-11-21)
+
+**Decision:** V11 replaces `UNIQUE (trace_id, span_id)` on `distributed_traces` with `UNIQUE (organization_id, trace_id, span_id)`, and span inserts use `ON CONFLICT … DO NOTHING`.
+
+**Why:** Trace and span IDs are chosen by the sender. With a global constraint, one tenant could pre-register another tenant's IDs (or two tenants could collide by accident), causing the victim's spans to be rejected — a cross-tenant denial of service and a timing side-channel on RLS-hidden rows. Scoped to the tenant, exporter retries are still idempotent for spans. Other derived rows (request metrics, DB operations, exception logs) are not deduplicated on retry; that is accepted because OTLP exporters only retry on 429/503/network errors, where the original request was not queued.
+
+## ADR-019 — OTLP/HTTP protobuf receiver design (2026-11-21)
+
+**Decision:** Implement only OTLP/HTTP with binary protobuf (the OpenTelemetry Java agent's default and supported by every SDK and the Collector), using the published `io.opentelemetry.proto:opentelemetry-proto` bindings. Protobuf reading is confined to `OtlpDecoder`; all interpretation (attribute limits and redaction, SQL sanitizing, span → request/DB/exception derivation, severity mapping, metric downsampling) lives in a protobuf-free `otlp.mapping` package. Decoded items become per-service `IngestBatch`es on the same bounded queue and `TelemetryStore` as REST. Per-item problems are reported through OTLP `partial_success`; errors use a hand-encoded `google.rpc.Status` (two fields; avoids the common-protos dependency).
+
+**Why:** gRPC would add Netty/grpc-java and a second port for little gain at this scale; OTLP/JSON is rarely used by agents. Keeping interpretation protobuf-free made it verifiable without a Maven build (ADR-013) and keeps protocol and semantics separable. Metrics are downsampled to one-minute aggregates at ingestion because raw OTLP metric streams (every instrument × attribute set × export interval) would dominate storage on an 8 GB/self-hosted target; the cost is that histogram bucket shapes are not kept (count/sum/min/max only), documented in KNOWN_ISSUES.
+

@@ -23,8 +23,8 @@ import org.springframework.stereotype.Service;
 public class InstallationGuideService {
 
     static final String KEY_HEADER = "X-PulseOps-Key";
-    /** Phase 7 provides the OTLP receiver; until then Java-agent/OTLP guides are marked unavailable. */
-    static final boolean OTLP_RECEIVER_AVAILABLE = false;
+    /** The OTLP/HTTP receiver (Phase 7). Kept as a switch so a build can ship without it. */
+    static final boolean OTLP_RECEIVER_AVAILABLE = true;
 
     private final ServiceCatalogService services;
     private final String baseUrl;
@@ -75,6 +75,7 @@ public class InstallationGuideService {
                 java -javaagent:/path/to/opentelemetry-javaagent.jar \\
                   -Dotel.service.name=%s \\
                   -Dotel.exporter.otlp.protocol=http/protobuf \\
+                  -Dotel.exporter.otlp.compression=gzip \\
                   -Dotel.exporter.otlp.endpoint=%s \\
                   -Dotel.exporter.otlp.headers=x-pulseops-key=${PULSEOPS_INGEST_KEY} \\
                   -Dotel.resource.attributes=deployment.environment=production \\
@@ -83,6 +84,7 @@ public class InstallationGuideService {
         String env = """
                 OTEL_SERVICE_NAME=%s
                 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+                OTEL_EXPORTER_OTLP_COMPRESSION=gzip
                 OTEL_EXPORTER_OTLP_ENDPOINT=%s
                 OTEL_EXPORTER_OTLP_HEADERS=x-pulseops-key=${PULSEOPS_INGEST_KEY}
                 """.formatted(service.getName(), endpoint);
@@ -93,7 +95,11 @@ public class InstallationGuideService {
                 new Step("Attach the agent", "Add the agent and exporter settings to the JVM command line.", jvm),
                 new Step("Or use environment variables", "Equivalent configuration for containers.", env),
                 new Step("Privacy defaults", "The agent does not capture request/response headers or bodies by "
-                        + "default, and sanitizes SQL statements. Keep those defaults.", null)));
+                        + "default, and sanitizes SQL statements. Keep those defaults. PulseOps additionally "
+                        + "redacts sensitive attributes and drops process command lines.", null),
+                new Step("Verify", "Start the application and send it a request. The onboarding status changes "
+                        + "to CONNECTED once the first export is processed (spans are exported every few "
+                        + "seconds, metrics every minute).", null)));
     }
 
     private InstallationGuide otlpGuide(MonitoredService service) {
@@ -101,17 +107,22 @@ public class InstallationGuideService {
         String env = """
                 OTEL_SERVICE_NAME=%s
                 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+                OTEL_EXPORTER_OTLP_COMPRESSION=gzip
                 OTEL_EXPORTER_OTLP_ENDPOINT=%s
                 OTEL_EXPORTER_OTLP_HEADERS=x-pulseops-key=${PULSEOPS_INGEST_KEY}
                 """.formatted(service.getName(), endpoint);
         return new InstallationGuide(IntegrationType.OTLP, OTLP_RECEIVER_AVAILABLE, unavailableReason(), endpoint,
                 List.of(new Step("Configure the OTLP exporter", "Works with any OpenTelemetry SDK (Python, Node.js, "
-                        + ".NET, Go) using the standard environment variables.", env)));
+                        + ".NET, Go) or Collector using the standard environment variables. Only OTLP/HTTP with "
+                        + "binary protobuf is accepted (not gRPC, not JSON).", env),
+                        new Step("Project-wide keys", "With a project-wide key, service.name must match an existing "
+                                + "service of the project exactly (case-insensitive); unknown names are rejected "
+                                + "and reported in the export response.", null)));
     }
 
     private static String unavailableReason() {
         return OTLP_RECEIVER_AVAILABLE ? null
-                : "The OTLP receiver is pending (implementation Phase 7). Use the REST API integration meanwhile.";
+                : "The OTLP receiver is not enabled in this build. Use the REST API integration.";
     }
 
     private static String jsonEscape(String s) {

@@ -24,4 +24,16 @@ public interface TelemetryStore {
 
     /** Error events also become ERROR log lines so they are searchable alongside logs. */
     void saveErrorLogs(IngestBatch batch, List<TelemetryEvent> errorEvents);
+
+    /** Spans; a duplicate (same tenant, trace and span ID — e.g. an exporter retry) is ignored. */
+    void saveSpans(IngestBatch batch);
+
+    /** OTLP log records and exceptions recorded on spans. */
+    void saveLogs(IngestBatch batch);
+
+    /** Database calls derived from client spans. */
+    void saveDbOperations(IngestBatch batch);
+
+    /** Merges one-minute metric aggregates into existing rows for the same series. */
+    void mergeMetricPoints(IngestBatch batch);
 }

@@ -12,7 +12,11 @@ import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pulseops.processing.model.DbOperationRecord;
 import com.pulseops.processing.model.IngestBatch;
+import com.pulseops.processing.model.LogRecordData;
+import com.pulseops.processing.model.MetricPointRecord;
+import com.pulseops.processing.model.SpanRecord;
 import com.pulseops.processing.model.TelemetryEvent;
 import com.pulseops.processing.service.ApiMetricAggregator;
 
@@ -50,6 +54,39 @@ public class JdbcTelemetryStore implements TelemetryStore {
             VALUES (?, ?, ?, 'ERROR', ?, ?, ?, ?, ?::jsonb, ?)
             """;
 
+    static final String INSERT_SPAN = """
+            INSERT INTO distributed_traces (organization_id, service_id, trace_id, span_id, parent_span_id, name, kind,
+                                            start_time, duration_ms, status_code, status_message, attributes,
+                                            received_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
+            ON CONFLICT (organization_id, trace_id, span_id) DO NOTHING
+            """;
+
+    static final String INSERT_LOG = """
+            INSERT INTO application_logs (organization_id, service_id, occurred_at, level, message, logger,
+                                          trace_id, span_id, attributes, received_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
+            """;
+
+    static final String INSERT_DB_OPERATION = """
+            INSERT INTO database_operations (organization_id, service_id, db_system, operation_type, operation,
+                                             table_name, duration_ms, occurred_at, is_error, error_message,
+                                             trace_id, span_id, received_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+
+    static final String MERGE_METRIC_POINT = """
+            INSERT INTO metric_points (organization_id, service_id, name, unit, kind, attributes, attributes_key,
+                                       bucket_start, sample_count, value_sum, value_min, value_max, value_last)
+            VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (service_id, name, attributes_key, bucket_start) DO UPDATE SET
+                sample_count = metric_points.sample_count + EXCLUDED.sample_count,
+                value_sum    = metric_points.value_sum + EXCLUDED.value_sum,
+                value_min    = LEAST(metric_points.value_min, EXCLUDED.value_min),
+                value_max    = GREATEST(metric_points.value_max, EXCLUDED.value_max),
+                value_last   = COALESCE(EXCLUDED.value_last, metric_points.value_last)
+            """;
+
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
 
@@ -60,6 +97,9 @@ public class JdbcTelemetryStore implements TelemetryStore {
 
     @Override
     public void saveEvents(IngestBatch batch) {
+        if (batch.events().isEmpty()) {
+            return;
+        }
         Timestamp received = Timestamp.from(batch.receivedAt());
         List<Object[]> rows = new ArrayList<>(batch.events().size());
         for (TelemetryEvent e : batch.events()) {
@@ -112,6 +152,64 @@ public class JdbcTelemetryStore implements TelemetryStore {
                     f == null ? null : f.type(), e.traceId(), e.spanId(), toJson(attributes), received});
         }
         jdbc.batchUpdate(INSERT_ERROR_LOG, rows);
+    }
+
+    @Override
+    public void saveSpans(IngestBatch batch) {
+        if (batch.spans().isEmpty()) {
+            return;
+        }
+        Timestamp received = Timestamp.from(batch.receivedAt());
+        List<Object[]> rows = new ArrayList<>(batch.spans().size());
+        for (SpanRecord s : batch.spans()) {
+            rows.add(new Object[]{batch.organizationId(), batch.serviceId(), s.traceId(), s.spanId(),
+                    s.parentSpanId(), s.name(), s.kind(), Timestamp.from(s.startTime()), s.durationMs(),
+                    s.statusCode(), s.statusMessage(), toJson(s.attributes()), received});
+        }
+        jdbc.batchUpdate(INSERT_SPAN, rows);
+    }
+
+    @Override
+    public void saveLogs(IngestBatch batch) {
+        if (batch.logs().isEmpty()) {
+            return;
+        }
+        Timestamp received = Timestamp.from(batch.receivedAt());
+        List<Object[]> rows = new ArrayList<>(batch.logs().size());
+        for (LogRecordData l : batch.logs()) {
+            rows.add(new Object[]{batch.organizationId(), batch.serviceId(), Timestamp.from(l.occurredAt()),
+                    l.level(), l.message(), l.logger(), l.traceId(), l.spanId(), toJson(l.attributes()), received});
+        }
+        jdbc.batchUpdate(INSERT_LOG, rows);
+    }
+
+    @Override
+    public void saveDbOperations(IngestBatch batch) {
+        if (batch.dbOperations().isEmpty()) {
+            return;
+        }
+        Timestamp received = Timestamp.from(batch.receivedAt());
+        List<Object[]> rows = new ArrayList<>(batch.dbOperations().size());
+        for (DbOperationRecord d : batch.dbOperations()) {
+            rows.add(new Object[]{batch.organizationId(), batch.serviceId(), d.dbSystem(), d.operationType(),
+                    d.operation(), d.tableName(), d.durationMs(), Timestamp.from(d.occurredAt()), d.error(),
+                    d.errorMessage(), d.traceId(), d.spanId(), received});
+        }
+        jdbc.batchUpdate(INSERT_DB_OPERATION, rows);
+    }
+
+    @Override
+    public void mergeMetricPoints(IngestBatch batch) {
+        if (batch.metricPoints().isEmpty()) {
+            return;
+        }
+        List<Object[]> rows = new ArrayList<>(batch.metricPoints().size());
+        for (MetricPointRecord m : batch.metricPoints()) {
+            rows.add(new Object[]{batch.organizationId(), batch.serviceId(), m.name(), m.unit(), m.kind(),
+                    toJson(m.attributes()), m.attributesKey(), Timestamp.from(m.bucketStart()), m.count(), m.sum(),
+                    m.min(), m.max(), m.last()});
+        }
+        jdbc.batchUpdate(MERGE_METRIC_POINT, rows);
     }
 
     /** User attributes plus the event's structured fields under OpenTelemetry-style names. */
