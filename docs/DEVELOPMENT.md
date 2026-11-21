@@ -61,6 +61,30 @@ npm run dev        # http://localhost:5173, proxies /api → :8080
 
 Run test suites one component at a time on low-memory machines; avoid parallel builds.
 
+### Database-backed backend tests (real PostgreSQL)
+
+Two test classes run only when `PULSEOPS_TEST_DB_URL` is set:
+
+- `TenantIsolationIntegrationTest`: RLS through the real `TenantAwareDataSource` on a one-connection pool.
+- `FullJourneyIntegrationTest`: boots the **whole application** (Flyway, Hibernate validation, both security chains, async processor) and walks register → login → org → project → service → key → telemetry → CONNECTED, plus cross-tenant 404, revoked key, refresh-token reuse, and CSRF checks.
+
+Use a **disposable** database owned by a non-superuser role. With Docker (≈ 40 MB RAM idle):
+
+```bash
+docker run -d --name pulseops-pg -e POSTGRES_PASSWORD=postgres -p 5433:5432 postgres:16-alpine
+docker exec pulseops-pg psql -U postgres -c "CREATE ROLE pulseops_app LOGIN PASSWORD 'dev_only_password'" -c "CREATE DATABASE pulseops_it OWNER pulseops_app"
+```
+
+Then set, for the test run (IntelliJ: Run → Edit Configurations → your JUnit configuration → Environment variables):
+
+```
+PULSEOPS_TEST_DB_URL=jdbc:postgresql://localhost:5433/pulseops_it
+PULSEOPS_TEST_DB_USER=pulseops_app
+PULSEOPS_TEST_DB_PASSWORD=dev_only_password
+```
+
+Tests use random names, so they can be re-run against the same database. Reset with `docker rm -f pulseops-pg`.
+
 ## Environment variables
 
 No secrets are ever committed; no variable is undocumented. (`deployment/.env.example` arrives with Phase 18.)
