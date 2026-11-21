@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 /**
  * Tenant isolation end-to-end against a real PostgreSQL: Flyway migrations + RLS +
@@ -40,13 +41,20 @@ class TenantIsolationIntegrationTest {
 
     @BeforeAll
     static void migrate() {
+        String url = System.getenv("PULSEOPS_TEST_DB_URL");
+        String user = System.getenv().getOrDefault("PULSEOPS_TEST_DB_USER", "pulseops_app");
+        String password = System.getenv("PULSEOPS_TEST_DB_PASSWORD");
+        // Flyway needs two connections (schema-history lock + migration), so it must not use
+        // the deliberately single-connection pool below.
+        Flyway.configure().dataSource(new DriverManagerDataSource(url, user, password))
+                .locations("classpath:db/migration").load().migrate();
+
         HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(System.getenv("PULSEOPS_TEST_DB_URL"));
-        config.setUsername(System.getenv().getOrDefault("PULSEOPS_TEST_DB_USER", "pulseops_app"));
-        config.setPassword(System.getenv("PULSEOPS_TEST_DB_PASSWORD"));
+        config.setJdbcUrl(url);
+        config.setUsername(user);
+        config.setPassword(password);
         config.setMaximumPoolSize(1);
         pool = new HikariDataSource(config);
-        Flyway.configure().dataSource(pool).locations("classpath:db/migration").load().migrate();
         jdbc = new JdbcTemplate(new TenantAwareDataSource(pool));
     }
 

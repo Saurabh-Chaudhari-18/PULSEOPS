@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import jakarta.persistence.EntityManager;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pulseops.common.tenancy.TenantContext;
@@ -15,6 +17,7 @@ import com.pulseops.common.web.PageResponse;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Append-only audit trail.
@@ -24,6 +27,11 @@ import org.springframework.stereotype.Service;
  * (RLS enforces the same). Platform-level events (registration, login) are written with no
  * organization context. Writes join the caller's transaction, so an audited change and its
  * audit entry commit or roll back together.</p>
+ *
+ * <p>Before inserting, pending JPA changes are flushed: the audit row is written with plain
+ * JDBC and references (by foreign key) rows such as a just-registered user or a just-created
+ * organization, which Hibernate would otherwise only write at commit. Found by the first
+ * end-to-end run against PostgreSQL (registration failed with an FK violation).</p>
  */
 @Service
 public class AuditService {
@@ -36,13 +44,18 @@ public class AuditService {
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    private final EntityManager entityManager;
 
-    public AuditService(JdbcTemplate jdbc, ObjectMapper objectMapper) {
+    public AuditService(JdbcTemplate jdbc, ObjectMapper objectMapper, EntityManager entityManager) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
+        this.entityManager = entityManager;
     }
 
     public void record(UUID actorId, String action, String resourceType, UUID resourceId, Map<String, ?> details) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            entityManager.flush();
+        }
         ClientInfo client = ClientInfo.current();
         jdbc.update(INSERT_SQL,
                 TenantContext.organizationId(),
