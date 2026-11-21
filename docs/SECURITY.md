@@ -26,6 +26,7 @@ Security is a first-class requirement. This document describes the controls **as
 - Escalation rules: only an OWNER can grant/change/remove OWNER; the last OWNER cannot be removed or demoted (enforced under row locks against concurrent requests).
 - **Defense in depth — PostgreSQL Row-Level Security** (ADR-006, ADR-009): `FORCE ROW LEVEL SECURITY` on all 22 tenant tables. Every pooled connection checkout sets `app.current_org_id` and `app.current_user_id` (empty when absent → policies match nothing → **fail closed**). A missing `WHERE organization_id = ?` in application code returns no rows instead of another tenant's data; a cross-tenant write is rejected by the database.
 - The application **must** connect as a non-superuser role without `BYPASSRLS` (`pulseops_app`); superusers bypass RLS.
+- If RLS ever blocks an application query (SQLSTATE 42501), it means an application-level check was missed: the request fails with a generic 500 and the full error is logged server-side. It never returns another tenant's data.
 
 ## 3. Audit logging
 

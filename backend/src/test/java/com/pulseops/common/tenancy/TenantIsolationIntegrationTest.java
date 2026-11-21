@@ -81,10 +81,12 @@ class TenantIsolationIntegrationTest {
         jdbc.update("INSERT INTO projects (organization_id, name) VALUES (?, 'Project A')", orgA);
         assertThat(count("projects")).isEqualTo(1);
 
-        // Cross-tenant write is rejected by RLS even though the code "asked" for it.
+        // Cross-tenant write is rejected by RLS even though the code "asked" for it. Spring wraps
+        // PostgreSQL's error (SQLSTATE 42501) as BadSqlGrammarException, so check the root cause.
         assertThatThrownBy(() -> jdbc.update(
                 "INSERT INTO projects (organization_id, name) VALUES (?, 'evil')", orgB))
-                .hasMessageContaining("row-level security");
+                .rootCause()
+                .hasMessageContaining("violates row-level security policy");
 
         // Same physical connection, different tenant: A's data is invisible.
         TenantContext.setOrganizationId(orgB);
