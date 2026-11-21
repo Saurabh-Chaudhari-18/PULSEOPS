@@ -2,7 +2,7 @@
 
 Statuses: `NOT STARTED` · `IN PROGRESS` · `BLOCKED` · `COMPLETED`
 
-Last updated: 2026-11-21
+Last updated: 2026-11-21 (Phases 3–6 completed)
 
 ## Phase Overview
 
@@ -11,10 +11,10 @@ Last updated: 2026-11-21
 | 0 | Repository Inspection and Planning | COMPLETED |
 | 1 | Project Foundation and Development Environment | COMPLETED |
 | 2 | Database Schema and Migrations | COMPLETED |
-| 3 | Authentication and Multi-Tenant Organization Management | IN PROGRESS — code complete, awaiting first Maven build + test run |
-| 4 | Projects, Services and Integration Management | IN PROGRESS — code complete, awaiting first Maven build + test run |
-| 5 | API Credentials and Integration Onboarding | IN PROGRESS — code complete, awaiting first Maven build + test run |
-| 6 | REST Telemetry Ingestion | IN PROGRESS — code complete, awaiting first Maven build + test run |
+| 3 | Authentication and Multi-Tenant Organization Management | COMPLETED |
+| 4 | Projects, Services and Integration Management | COMPLETED |
+| 5 | API Credentials and Integration Onboarding | COMPLETED |
+| 6 | REST Telemetry Ingestion | COMPLETED |
 | 7 | OpenTelemetry OTLP Ingestion | NOT STARTED |
 | 8 | Java Sample Application Integration | NOT STARTED |
 | 9 | Application and API Monitoring | NOT STARTED |
@@ -67,7 +67,7 @@ Last updated: 2026-11-21
 
 ---
 
-## Phase 3 — Authentication and Multi-Tenant Organization Management — IN PROGRESS (2026-11-21)
+## Phase 3 — Authentication and Multi-Tenant Organization Management — COMPLETED (2026-11-21)
 
 **Objectives:** registration with email verification, login, JWT access tokens, rotating refresh tokens with theft detection, logout/revocation, password reset, organization creation and management, team & role management, RBAC enforcement, tenant context wired into PostgreSQL RLS, audit logging.
 
@@ -97,7 +97,8 @@ Last updated: 2026-11-21
   - **Real bug — registration and organization creation:** `AuditService` writes with JDBC immediately, but the user/organization it references (FK) was still pending in the JPA persistence context → FK violation → 409. Fix: `AuditService.record` flushes pending JPA changes first (regression test `AuditServiceTest`).
   - Test bug: `TenantIsolationIntegrationTest` ran Flyway on its deliberately single-connection pool; Flyway needs two connections → 30 s timeout. It now migrates through a separate connection.
 - ✅ **Fourth run (commit 72cb9fc): `FullJourneyIntegrationTest` passed** — full application on PostgreSQL: register → login → org → project → service → key → REST telemetry → CONNECTED, redaction and route templating verified in the stored rows, RLS hides data without context, cross-tenant 404, revoked key 401, JWT rejected on ingest, refresh rotation + reuse revocation, CSRF header, actuator exposure. `TenantIsolationIntegrationTest`: RLS **correctly rejected** the cross-tenant write, but the assertion read Spring's wrapper message ("bad SQL grammar") instead of PostgreSQL's root cause → assertion fixed.
-- ⏳ Remaining for COMPLETED: re-run of the DB-gated tests (`TenantIsolationIntegrationTest`, new `FullJourneyIntegrationTest` which also proves application boot + Hibernate validation) against PostgreSQL — see DEVELOPMENT.md. Previously listed as not yet run: JUnit/Mockito unit tests (rate limiter, tokens, JWT round-trip/forgery/expiry, password policy, slugs, refresh rotation & reuse detection, login/registration enumeration defences, password reset, member role invariants, tenant interceptor) and `TenantIsolationIntegrationTest` (real RLS through a single-connection pool). Application boot (Hibernate `validate`) also unverified.
+- ✅ **Fifth run (commit fe71e51) — ALL GREEN, exit code 0:** every unit test plus `TenantIsolationIntegrationTest` and `FullJourneyIntegrationTest` against PostgreSQL 16.15. **Phases 3, 4, 5 and 6 acceptance criteria met → COMPLETED.**
+- (historical) Remaining for COMPLETED: re-run of the DB-gated tests (`TenantIsolationIntegrationTest`, new `FullJourneyIntegrationTest` which also proves application boot + Hibernate validation) against PostgreSQL — see DEVELOPMENT.md. Previously listed as not yet run: JUnit/Mockito unit tests (rate limiter, tokens, JWT round-trip/forgery/expiry, password policy, slugs, refresh rotation & reuse detection, login/registration enumeration defences, password reset, member role invariants, tenant interceptor) and `TenantIsolationIntegrationTest` (real RLS through a single-connection pool). Application boot (Hibernate `validate`) also unverified.
 
 **Acceptance criteria (Phase 3 is COMPLETED only when all pass)**
 1. `mvn test` green, including `TenantIsolationIntegrationTest` against PostgreSQL. ⏳
@@ -111,7 +112,7 @@ Last updated: 2026-11-21
 
 ---
 
-## Phase 4 — Projects, Services and Integration Management — IN PROGRESS (2026-11-21)
+## Phase 4 — Projects, Services and Integration Management — COMPLETED (2026-11-21)
 
 **Completed (code):** `project` module (create/list+search/get/update/archive/restore/soft delete with name confirmation; service & connected-service counts), `appservice` module (services per project and org-wide; CRUD, archive/restore, soft delete; connection state in every view), case-insensitive enum input, escaped LIKE search (`LikePatterns`), domain events (`ProjectDeactivated`, `ServiceDeactivated`) so deletions cascade to services and credentials in the same transaction without circular dependencies.
 
@@ -119,13 +120,13 @@ Last updated: 2026-11-21
 
 **Acceptance (pending build):** CRUD via HTTP with RBAC; archived project blocks new services/keys/telemetry; deleting a project revokes its keys.
 
-## Phase 5 — API Credentials and Integration Onboarding — IN PROGRESS (2026-11-21)
+## Phase 5 — API Credentials and Integration Onboarding — COMPLETED (2026-11-21)
 
 **Completed (code):** `credential` module (key format, hashed storage, create-once, list, revoke, rotate with grace, expiry, last-used throttling, revocation on project/service deletion, `CredentialAuthenticator` using the V10 hash-scoped policy); `integration` module (connection lifecycle NOT_CONNECTED → WAITING_FOR_DATA → CONNECTED only on real telemetry; CONNECTION_ERROR; DISABLED; verification status with `receivingNow`/`nextStep`; installation guides for REST (available) and Java agent/OTLP (marked unavailable until Phase 7)). Migration **V10**.
 
 **Tests executed:** V10 policy behaviour on PostgreSQL (only the presented hash's row visible, setting cleared at commit, wrong hash sees nothing, hash context cannot write) ✅ — now permanent assertions in `verify_migrations.sh`. Connection-status upserts (first telemetry, 30 s write throttle, error → connected → error-while-connected, disabled never re-enabled) ✅. Unit tests written (`IntegrationCredentialTest`, `CredentialServiceTest`, `CredentialAuthenticatorTest`, `IntegrationConnectionTest`, `IntegrationServiceTest`) ⏳.
 
-## Phase 6 — REST Telemetry Ingestion — IN PROGRESS (2026-11-21)
+## Phase 6 — REST Telemetry Ingestion — COMPLETED (2026-11-21)
 
 **Completed (code):** `POST /api/v1/ingest/v1/events` on a dedicated security chain; key from `X-PulseOps-Key` or `Bearer`; per-key rate limit; stream-enforced body limit; JSON parsing; tenant-scoped service resolution (no auto-creation, scope checks, archived/disabled refusal); `EventNormalizer` (all-or-nothing validation with indexed errors, normalization, truncation); `SensitiveDataRedactor`; `RouteTemplates`; `ApiMetricAggregator` + `LatencyHistogram` (ADR-014); bounded async `TelemetryProcessor` (ADR-016) writing through the `TelemetryStore` port (`JdbcTelemetryStore`: raw events, merged minute aggregates, error logs) and marking connections CONNECTED.
 
