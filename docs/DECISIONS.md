@@ -81,3 +81,27 @@ Short, dated records of decisions that shape the system. Newest last.
 **Decision:** Until Maven can run, Java code is verified by (1) a javac-parser syntax check over all sources, (2) full javac attribution without dependencies, filtering out errors caused purely by absent external libraries, and (3) executing every embedded SQL statement against PostgreSQL 16 under the same tenant contexts the code sets. Unit tests are written but have **not been executed**.
 
 **Why:** Gives real evidence about our own code (syntax, cross-class types, SQL, RLS behaviour) without claiming more than was verified. Spring/Hibernate API usage is only validated by the first real build.
+
+## ADR-014 — Mergeable fixed-bucket latency histograms (2026-11-21)
+
+**Decision:** Each `api_metrics` minute row stores a 25-bucket latency histogram (`duration_buckets bigint[]`, bounds 1 ms … 60 s + overflow) alongside count/sum/min/max. Concurrent writes and time-range queries merge histograms by element-wise addition (`pulseops_histogram_add` / `pulseops_histogram_sum`); p50/p95/p99 are computed from the merged histogram with linear interpolation.
+
+**Why:** Percentiles cannot be averaged across minutes or across partial flushes; any dashboard showing "p95 over the last hour" from per-minute p95s would be wrong. Bucketed histograms (the Prometheus approach) are exactly mergeable, cheap, and their error is bounded by bucket width. The stored `p50_ms/p95_ms/p99_ms` columns stay unused (nullable) in v1.
+
+## ADR-015 — Credential lookup via hash-scoped RLS policy (2026-11-21)
+
+**Decision:** Ingestion authenticates a key by binding its SHA-256 hash as the transaction-local setting `app.credential_hash`; a SELECT-only policy reveals exactly the credential row with that hash. After the row identifies the organization, all further work runs under that organization's tenant context.
+
+**Why:** Keeps FORCE RLS on `integration_credentials` with no bypass role or SECURITY DEFINER escape hatch. Seeing a row requires possessing its plaintext key; the setting cannot leak because it is transaction-local.
+
+## ADR-016 — Bounded in-memory processing queue, at-most-once (2026-11-21)
+
+**Decision:** Validated batches go into an `ArrayBlockingQueue` (default 200 batches) drained by a small worker pool (default 2). A full queue returns 503 with `Retry-After`. Graceful shutdown drains for up to 20 s.
+
+**Why:** The spec forbids Kafka in v1 and targets 8 GB machines. A bounded queue gives back-pressure and predictable memory. Trade-off: batches queued during a crash are lost (documented in KNOWN_ISSUES); a durable outbox table or a broker can replace the queue behind `TelemetryProcessor.submit` later.
+
+## ADR-017 — Validation before acknowledgement; services never auto-created (2026-11-21)
+
+**Decision:** Authentication, scope resolution and full event validation happen synchronously; only valid batches get 202. Telemetry naming an unknown service is rejected (404 `UNKNOWN_SERVICE`) rather than creating it.
+
+**Why:** Clients get precise, actionable errors at send time instead of silent drops later. Auto-creating services from telemetry would let a misconfigured or compromised sender pollute a tenant's service catalog and bypass the project's management permissions.

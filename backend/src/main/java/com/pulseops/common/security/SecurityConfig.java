@@ -7,6 +7,7 @@ import com.pulseops.common.config.PulseOpsProperties;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -36,7 +37,33 @@ public class SecurityConfig {
 
     static final int BCRYPT_STRENGTH = 12;
 
+    /**
+     * Telemetry ingestion (REST and, from Phase 7, OTLP). Authenticated by integration key
+     * inside the endpoint, never by JWT: this chain has no bearer-token filter, no CORS
+     * (ingestion is server-to-server), no session and no CSRF surface (no cookies).
+     */
     @Bean
+    @Order(1)
+    SecurityFilterChain ingestSecurity(HttpSecurity http, JsonSecurityErrorHandler errors) throws Exception {
+        http
+                .securityMatcher("/api/v1/ingest/**", "/otlp/**")
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.disable())
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .httpBasic(basic -> basic.disable())
+                .formLogin(form -> form.disable())
+                .logout(logout -> logout.disable())
+                .requestCache(cache -> cache.disable())
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(errors).accessDeniedHandler(errors))
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'none'; frame-ancestors 'none'"))
+                        .frameOptions(frame -> frame.deny()));
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
     SecurityFilterChain apiSecurity(HttpSecurity http, JsonSecurityErrorHandler errors,
                                     CorsConfigurationSource corsConfigurationSource) throws Exception {
         http

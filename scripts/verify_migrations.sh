@@ -25,10 +25,11 @@ CREATE DATABASE $DB OWNER $APP_ROLE;
 SQL
 
 echo "==> Applying migrations from $MIGRATIONS_DIR as $APP_ROLE (non-superuser, like Flyway)"
-for f in "$MIGRATIONS_DIR"/V*.sql; do
-  echo "    $(basename "$f")"
-  PGPASSWORD="$APP_PASSWORD" psql -h "$PGHOST" -U "$APP_ROLE" -d "$DB" -v ON_ERROR_STOP=1 -q -f "$f"
-done
+# Numeric version order, as Flyway applies them (a plain glob would put V10 before V2).
+while IFS= read -r name; do
+  echo "    $name"
+  PGPASSWORD="$APP_PASSWORD" psql -h "$PGHOST" -U "$APP_ROLE" -d "$DB" -v ON_ERROR_STOP=1 -q -f "$MIGRATIONS_DIR/$name"
+done < <(cd "$MIGRATIONS_DIR" && ls V*__*.sql | sort -V)
 
 echo "==> Asserting invariants"
 PGPASSWORD="$APP_PASSWORD" psql -h "$PGHOST" -U "$APP_ROLE" -d "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
@@ -123,6 +124,35 @@ DO $$ BEGIN
   IF (SELECT count(*) FROM organizations) <> 0 THEN RAISE EXCEPTION 'removed member still sees organization'; END IF;
 END $$;
 COMMIT;
+
+-- V10 credential-by-secret: a key's row is visible only to a transaction presenting its hash.
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000a';
+INSERT INTO integration_credentials (organization_id, project_id, name, key_prefix, secret_hash)
+ VALUES ('20000000-0000-0000-0000-00000000000a','30000000-0000-0000-0000-000000000001','k1','po_x','HASH_A'),
+        ('20000000-0000-0000-0000-00000000000a','30000000-0000-0000-0000-000000000001','k2','po_y','HASH_B');
+COMMIT;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM integration_credentials) <> 0 THEN RAISE EXCEPTION 'credentials visible without context'; END IF;
+END $$;
+BEGIN;
+SELECT set_config('app.credential_hash', 'HASH_A', true);
+DO $$ BEGIN
+  IF (SELECT string_agg(name, ',') FROM integration_credentials) IS DISTINCT FROM 'k1' THEN
+    RAISE EXCEPTION 'credential_by_secret exposed wrong rows';
+  END IF;
+END $$;
+UPDATE integration_credentials SET last_used_at = now();
+DO $$ BEGIN
+  IF (SELECT count(*) FROM integration_credentials WHERE last_used_at IS NOT NULL) <> 0 THEN
+    RAISE EXCEPTION 'hash context was able to write';
+  END IF;
+END $$;
+COMMIT;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM integration_credentials) <> 0 THEN RAISE EXCEPTION 'credential hash setting leaked past commit'; END IF;
+  IF pulseops_histogram_add('{1,2,3}', '{10,20}') <> '{11,22,3}'::bigint[] THEN RAISE EXCEPTION 'histogram add wrong'; END IF;
+END $$;
 
 -- Seed catalog present.
 DO $$ BEGIN

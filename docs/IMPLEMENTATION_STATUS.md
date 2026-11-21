@@ -12,9 +12,9 @@ Last updated: 2026-11-21
 | 1 | Project Foundation and Development Environment | COMPLETED |
 | 2 | Database Schema and Migrations | COMPLETED |
 | 3 | Authentication and Multi-Tenant Organization Management | IN PROGRESS — code complete, awaiting first Maven build + test run |
-| 4 | Projects, Services and Integration Management | NOT STARTED |
-| 5 | API Credentials and Integration Onboarding | NOT STARTED |
-| 6 | REST Telemetry Ingestion | NOT STARTED |
+| 4 | Projects, Services and Integration Management | IN PROGRESS — code complete, awaiting first Maven build + test run |
+| 5 | API Credentials and Integration Onboarding | IN PROGRESS — code complete, awaiting first Maven build + test run |
+| 6 | REST Telemetry Ingestion | IN PROGRESS — code complete, awaiting first Maven build + test run |
 | 7 | OpenTelemetry OTLP Ingestion | NOT STARTED |
 | 8 | Java Sample Application Integration | NOT STARTED |
 | 9 | Application and API Monitoring | NOT STARTED |
@@ -100,3 +100,33 @@ Last updated: 2026-11-21
 **Pending tasks:** run the build + tests (blocked by KNOWN_ISSUES #1); invitation emails for unregistered users (deferred); scheduled cleanup of expired tokens (Phase 17).
 
 **Next steps:** once a build is possible, fix any compile/test failures, then mark Phase 3 COMPLETED and start Phase 4 (projects & services). Phase 4 work can proceed code-first in parallel if builds remain blocked.
+
+---
+
+## Phase 4 — Projects, Services and Integration Management — IN PROGRESS (2026-11-21)
+
+**Completed (code):** `project` module (create/list+search/get/update/archive/restore/soft delete with name confirmation; service & connected-service counts), `appservice` module (services per project and org-wide; CRUD, archive/restore, soft delete; connection state in every view), case-insensitive enum input, escaped LIKE search (`LikePatterns`), domain events (`ProjectDeactivated`, `ServiceDeactivated`) so deletions cascade to services and credentials in the same transaction without circular dependencies.
+
+**Tests executed:** every list/detail SQL statement run on PostgreSQL under tenant context (counts, filters, literal `%`/`_` search, case-insensitive unique names with soft-delete reuse, cross-tenant invisibility) ✅. Offline javac checks ✅. Unit tests written (`ProjectServiceTest`, `ServiceCatalogServiceTest`, `ProjectDetailsTest`, `LikePatternsTest`) ⏳ not executed.
+
+**Acceptance (pending build):** CRUD via HTTP with RBAC; archived project blocks new services/keys/telemetry; deleting a project revokes its keys.
+
+## Phase 5 — API Credentials and Integration Onboarding — IN PROGRESS (2026-11-21)
+
+**Completed (code):** `credential` module (key format, hashed storage, create-once, list, revoke, rotate with grace, expiry, last-used throttling, revocation on project/service deletion, `CredentialAuthenticator` using the V10 hash-scoped policy); `integration` module (connection lifecycle NOT_CONNECTED → WAITING_FOR_DATA → CONNECTED only on real telemetry; CONNECTION_ERROR; DISABLED; verification status with `receivingNow`/`nextStep`; installation guides for REST (available) and Java agent/OTLP (marked unavailable until Phase 7)). Migration **V10**.
+
+**Tests executed:** V10 policy behaviour on PostgreSQL (only the presented hash's row visible, setting cleared at commit, wrong hash sees nothing, hash context cannot write) ✅ — now permanent assertions in `verify_migrations.sh`. Connection-status upserts (first telemetry, 30 s write throttle, error → connected → error-while-connected, disabled never re-enabled) ✅. Unit tests written (`IntegrationCredentialTest`, `CredentialServiceTest`, `CredentialAuthenticatorTest`, `IntegrationConnectionTest`, `IntegrationServiceTest`) ⏳.
+
+## Phase 6 — REST Telemetry Ingestion — IN PROGRESS (2026-11-21)
+
+**Completed (code):** `POST /api/v1/ingest/v1/events` on a dedicated security chain; key from `X-PulseOps-Key` or `Bearer`; per-key rate limit; stream-enforced body limit; JSON parsing; tenant-scoped service resolution (no auto-creation, scope checks, archived/disabled refusal); `EventNormalizer` (all-or-nothing validation with indexed errors, normalization, truncation); `SensitiveDataRedactor`; `RouteTemplates`; `ApiMetricAggregator` + `LatencyHistogram` (ADR-014); bounded async `TelemetryProcessor` (ADR-016) writing through the `TelemetryStore` port (`JdbcTelemetryStore`: raw events, merged minute aggregates, error logs) and marking connections CONNECTED.
+
+**Tests executed**
+- ✅ **Compiled and executed** (JDK-only classes): `RouteTemplates`, `SensitiveDataRedactor`, `LatencyHistogram`, `EventNormalizer`, `ApiMetricAggregator` — 81 assertions, all passing.
+- ✅ Storage SQL on PostgreSQL: event insert with JSONB attributes, error-log insert satisfying trace/span CHECKs, cross-tenant insert rejected by RLS, histogram-merging upsert, range aggregation with `pulseops_histogram_sum`.
+- ✅ Offline javac checks over 159 files.
+- ⏳ JUnit: `IngestServiceTest`, `TelemetryProcessorTest`, `BoundedBodyTest`, `IngestControllerTest` + JUnit ports of the executed checks.
+
+**Acceptance (pending build):** sample batch → 202 → rows in `telemetry_events`/`api_metrics`/`application_logs` → service CONNECTED; revoked/expired/invalid keys 401; oversize 413; invalid events 400 with field paths; cross-service/tenant writes impossible.
+
+**Next:** Phase 7 (OTLP/HTTP protobuf receiver — needs the `opentelemetry-proto` dependency, so it requires a working Maven build to do properly) or Phase 12 (Python anomaly detection — fully testable here now).

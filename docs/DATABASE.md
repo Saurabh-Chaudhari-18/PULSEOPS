@@ -43,9 +43,15 @@ Highlights:
 - **V9 user-scoped policies** (ADR-009): with `app.current_user_id` bound, a user can read their own `organization_members` rows and the organizations where they hold an *active* membership — needed to check membership before an organization context exists. These are permissive SELECT-only policies; writes still require the organization context.
 - **Backend wiring:** `TenantAwareDataSource` sets both settings on every pooled-connection checkout (empty when unbound), so stale tenants cannot leak between requests. The context must be bound before a transaction opens.
 
+## V10 — ingestion support
+
+- `credential_by_secret` policy (ADR-015): SELECT on `integration_credentials` only for the row whose `secret_hash` equals the transaction-local `app.credential_hash`.
+- `api_metrics.duration_buckets bigint[]` + `pulseops_histogram_add(a, b)` and aggregate `pulseops_histogram_sum(bigint[])` (ADR-014). Merging upsert: `ON CONFLICT (...) DO UPDATE SET duration_buckets = pulseops_histogram_add(api_metrics.duration_buckets, EXCLUDED.duration_buckets)`.
+- `integration_credentials_project_idx` for listing keys per project.
+
 ## Verification
 
-`scripts/verify_migrations.sh` recreates a scratch DB, applies all migrations **as the non-superuser app role**, and asserts: seed catalog, cross-tenant write rejected, cross-tenant read empty, no-context fail-closed, user-scoped membership visibility, no joining foreign organizations via user context, removed members losing visibility. Run it after every schema change. Last run: 2026-11-21, PostgreSQL 16.15, V1–V9 — PASS.
+`scripts/verify_migrations.sh` recreates a scratch DB, applies all migrations **as the non-superuser app role**, and asserts: seed catalog, cross-tenant write rejected, cross-tenant read empty, no-context fail-closed, user-scoped membership visibility, no joining foreign organizations via user context, removed members losing visibility. Run it after every schema change. Includes V10 checks (credential row visible only with its hash, setting cleared at commit, no writes via hash context, histogram addition). Migrations are applied in numeric version order like Flyway. Last run: 2026-11-21, PostgreSQL 16.15, V1–V10 — PASS.
 
 `TenantIsolationIntegrationTest` (backend) repeats the core checks through the real `TenantAwareDataSource` over a one-connection pool when `PULSEOPS_TEST_DB_URL` is set.
 

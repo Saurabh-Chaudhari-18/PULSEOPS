@@ -40,15 +40,30 @@ Append-only `audit_logs`: registration, email verification, logins and failed lo
 - HTTPS: terminate TLS at a reverse proxy (documented in Phase 18); keep `PULSEOPS_COOKIE_SECURE=true`.
 - All actuator endpoints except `health` (no details) and `info` are unexposed; everything not explicitly routed is denied.
 
-## 5. Secrets
+## 5. Integration credentials and telemetry
+
+| Control | Implementation |
+|---|---|
+| Key generation | `po_` + 256 bits from `SecureRandom` (recognizable prefix for secret scanners) |
+| Storage | SHA-256 hash only; a 12-character non-secret prefix for display. Shown once (`Cache-Control: no-store`), never retrievable |
+| Lifecycle | Expiry (1–365 days, optional), revocation, rotation with optional grace period (≤ 72 h), last-used tracking; keys of deleted projects/services are revoked in the same transaction |
+| Scope | Project-wide or single service; service-scoped keys cannot send for other services; telemetry can only target existing, active services of the key's project |
+| Lookup under RLS | Hash-scoped SELECT policy (ADR-015): a key's row is visible only to a transaction presenting that key's hash; then all work runs in the key's tenant context |
+| Separate auth path | Ingestion has its own security filter chain: no JWT parsing, no CORS, no cookies |
+| Abuse limits | 1 MiB bodies (enforced on the stream, not just Content-Length), 500 events/batch, 50 attributes/event, per-key rate limit (429), bounded queue (503) |
+| Redaction at ingest | Secret-named attributes → `[REDACTED]`; bearer/basic tokens, JWTs, PulseOps keys, URL credentials, `password=` pairs and Luhn-valid card numbers scrubbed from messages, stack traces and attribute values. Request bodies are never collected. Over-redaction is preferred |
+| Input validation | Strict types/ranges per field; timestamps limited to −7 d/+5 min; trace/span IDs must be W3C hex; control characters rejected in names; whole batch rejected on any error |
+
+## 6. Secrets
 
 - No secrets in the repository; all configuration via environment variables (see DEVELOPMENT.md).
-- One-time tokens and refresh tokens: hashed at rest. Integration credentials (Phase 5) will follow the same rule and be shown once.
+- One-time tokens and refresh tokens: hashed at rest. Integration keys follow the same rule and are shown once (§5).
 - Email bodies containing one-time links are never logged on failure; the dev mail mode logs them by design and is restricted to the `dev` profile.
 
-## 6. Known gaps (tracked in KNOWN_ISSUES.md)
+## 7. Known gaps (tracked in KNOWN_ISSUES.md)
 
 - Rate limits are per instance (in-memory); multi-instance SaaS needs a shared store.
 - No email invitations for people without an account yet (members must register first).
 - Access tokens cannot be revoked before their 15-minute expiry (by design; short TTL).
-- Pending phases: telemetry redaction & payload limits (6–7), integration credential security (5), SSRF protection for outbound integrations (15), dependency vulnerability scanning in CI (17).
+- Ingestion queue is in memory (at-most-once) — ADR-016.
+- Pending phases: OTLP attribute filtering (7), SSRF protection for outbound integrations (15), dependency vulnerability scanning in CI (17).

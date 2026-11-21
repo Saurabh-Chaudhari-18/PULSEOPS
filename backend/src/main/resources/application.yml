@@ -18,6 +18,11 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  jackson:
+    mapper:
+      accept-case-insensitive-enums: true
+    deserialization:
+      fail-on-unknown-properties: false
   # SMTP: set SPRING_MAIL_HOST / SPRING_MAIL_PORT / SPRING_MAIL_USERNAME / SPRING_MAIL_PASSWORD
   # directly as environment variables. Deliberately NOT mapped here: an empty
   # spring.mail.host would still activate Spring's mail auto-configuration.
@@ -46,8 +51,12 @@ pulseops:
     base-url: ${PULSEOPS_ML_URL:http://localhost:8500}
     shared-secret: ${PULSEOPS_ML_SECRET:}
   ingest:
+    public-base-url: ${PULSEOPS_INGEST_PUBLIC_URL:http://localhost:8080}
     max-payload-bytes: ${PULSEOPS_INGEST_MAX_BYTES:1048576}
     max-batch-events: ${PULSEOPS_INGEST_MAX_BATCH:500}
+    queue-capacity: ${PULSEOPS_INGEST_QUEUE_CAPACITY:200}
+    worker-threads: ${PULSEOPS_INGEST_WORKERS:2}
+    batches-per-minute-per-key: ${PULSEOPS_INGEST_RATE_PER_KEY:600}
 
 server:
   port: ${PULSEOPS_PORT:8080}

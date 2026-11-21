@@ -12,3 +12,9 @@
 | 8 | Refresh concurrency | Two truly concurrent refreshes with the same token trigger reuse detection and sign the user out (strict, no grace window). The web client must serialize refresh calls (Phase 9 frontend). | BY DESIGN — documented |
 | 9 | Access tokens | Cannot be revoked before their 15-minute expiry. Disabled users keep working access tokens until expiry, but lose organization access immediately on removal (membership is checked per request). | BY DESIGN |
 | 10 | Frontend | Auth/onboarding screens are not built yet (frontend build blocked by #1). | PLANNED |
+| 11 | Ingestion durability | The processing queue is in memory: batches accepted (202) but not yet processed are lost if the backend crashes (ADR-016). Graceful shutdown drains up to 20 s. | BY DESIGN (v1) — durable outbox planned |
+| 12 | Ingestion | Compressed bodies (`Content-Encoding: gzip`) are rejected with 415. OpenTelemetry exporters default to no compression for OTLP/HTTP, but this must be supported for OTLP in Phase 7. | PLANNED (Phase 7) |
+| 13 | Ingestion | Per-key rate limiting and credential `last_used_at` throttling are per instance (in-memory). | OPEN (Phase 17) |
+| 14 | Integrations | Java-agent and OTLP integration instructions are returned with `available=false` until the OTLP receiver exists. | PLANNED (Phase 7) |
+| 15 | Metrics | Error rate counts only 5xx as errors (4xx are client errors). Documented; configurable per alert rule later. | BY DESIGN |
+| 16 | Verification | `IngestServiceTest`, `TelemetryProcessorTest` and the other Phase 4–6 JUnit tests are written but not executed (KNOWN_ISSUES #1). The JDK-only processing classes (route templates, redaction, histograms, event normalization) **were** compiled and executed here against 81 assertions. | PARTIAL |

@@ -82,6 +82,92 @@ Roles: `OWNER` (everything), `ADMIN` (everything except `org.manage`), `MEMBER` 
 
 `GET /actuator/health` (public, no details) · `GET /actuator/info`. All other actuator endpoints are not exposed.
 
+## Projects (bearer)
+
+Enums are documented in UPPER_SNAKE case and accepted case-insensitively (`production` = `PRODUCTION`).
+
+| Method & path | Permission | Body / query | Success / errors |
+|---|---|---|---|
+| `GET /organizations/{orgId}/projects` | `project.read` | `q` (name search), `status` (`ACTIVE`/`ARCHIVED`), `page`, `size` | page of projects |
+| `POST /organizations/{orgId}/projects` | `project.manage` | `{name, description?, techStack?, environment?, region?, applicationType?}` | **201**; 409 `PROJECT_NAME_TAKEN` |
+| `GET /organizations/{orgId}/projects/{projectId}` | `project.read` | — | project; 404 `PROJECT_NOT_FOUND` |
+| `PATCH /organizations/{orgId}/projects/{projectId}` | `project.manage` | any subset of the create fields (blank clears optional text) | project |
+| `POST …/projects/{projectId}/archive` · `/restore` | `project.manage` | — | project. Archived projects accept no new services, keys or telemetry |
+| `DELETE …/projects/{projectId}` | `project.manage` | `{confirmName}` | 204. Soft delete; its services are deleted and **all its keys revoked** in the same transaction |
+
+Project: `{id, name, description, techStack, environment (DEVELOPMENT|TESTING|STAGING|PRODUCTION|OTHER), region, applicationType, status, serviceCount, connectedServiceCount, createdAt, updatedAt}`.
+
+## Services (bearer)
+
+| Method & path | Permission | Body / query | Success / errors |
+|---|---|---|---|
+| `GET /organizations/{orgId}/services` | `project.read` | `projectId?`, `q?`, `page`, `size` | page of services (all projects) |
+| `GET …/projects/{projectId}/services` | `project.read` | `q?`, `page`, `size` | page of services |
+| `POST …/projects/{projectId}/services` | `project.manage` | `{name, description?, technology?}` | **201**; 409 `SERVICE_NAME_TAKEN` / `PROJECT_ARCHIVED` |
+| `GET` / `PATCH /organizations/{orgId}/services/{serviceId}` | read / manage | `{name?, description?, technology?}` | service |
+| `POST …/services/{serviceId}/archive` · `/restore` | `project.manage` | — | service (archiving disables ingestion) |
+| `DELETE …/services/{serviceId}` | `project.manage` | — | 204; service-scoped keys revoked |
+
+Service: `{id, projectId, projectName, name, description, technology (JAVA_SPRING_BOOT|PYTHON|NODEJS|DOTNET|GO|CUSTOM_REST|OPENTELEMETRY|OTHER), status, connection: {integrationType, status, firstTelemetryAt, lastTelemetryAt, lastError}, createdAt}`.
+
+## Integration credentials (bearer, `credential.manage`)
+
+| Method & path | Body | Success / errors |
+|---|---|---|
+| `GET …/projects/{projectId}/credentials` | — | list of `{id, projectId, serviceId, name, keyPrefix, status, expiresAt, revokedAt, lastUsedAt, rotatedFromId, createdAt}` — never the key |
+| `POST …/projects/{projectId}/credentials` | `{name, serviceId?, expiresInDays? (1–365)}` | **201** `{credential, key, notice}` — **the only time the key is ever returned** (`Cache-Control: no-store`); 400 `SERVICE_NOT_IN_PROJECT`; 409 `PROJECT_ARCHIVED` |
+| `POST /organizations/{orgId}/credentials/{id}/revoke` | — | credential (status `REVOKED`) |
+| `POST /organizations/{orgId}/credentials/{id}/rotate` | `{graceHours? (0–72)}` | `{credential, key, notice}` — new key, same scope; old key revoked now, or valid until the grace deadline; 409 `CREDENTIAL_NOT_ACTIVE` |
+
+Keys look like `po_` + 43 URL-safe characters. Omit `serviceId` for a project-wide key (batches must then name their service). Status is `EXPIRED` once `expiresAt` passes.
+
+## Integration onboarding (bearer)
+
+| Method & path | Permission | Body / query | Success |
+|---|---|---|---|
+| `GET …/services/{serviceId}/integration` | `project.read` | — | `{serviceId, integrationType, status, firstTelemetryAt, lastTelemetryAt, lastError, receivingNow, usableKeys, nextStep}` — poll this in the "Verify connection" step |
+| `PUT …/services/{serviceId}/integration` | `project.manage` | `{type: JAVA_AGENT|REST_API|OTLP}` | status view |
+| `POST …/integration/disable` · `/enable` | `project.manage` | — | status view; disabled services reject telemetry (403 `INGESTION_DISABLED`) |
+| `GET …/integration/instructions?type=REST_API` | `project.read` | — | `{type, available, unavailableReason, endpoint, steps[{title, description, snippet}]}` |
+
+Connection status: `NOT_CONNECTED` → `WAITING_FOR_DATA` (method chosen) → `CONNECTED` **only after telemetry is actually processed**. `CONNECTION_ERROR` when an authenticated sender's data was rejected before ever connecting; `DISABLED` by user or when a service is archived/deleted. `receivingNow` is false if nothing arrived in the last 15 minutes. JAVA_AGENT/OTLP instructions report `available: false` until the OTLP receiver ships (Phase 7).
+
+## Telemetry ingestion — REST (integration key)
+
+`POST /api/v1/ingest/v1/events` — authenticated with header **`X-PulseOps-Key: po_…`** (or `Authorization: Bearer po_…`); user JWTs are not accepted here. `Content-Type: application/json`, uncompressed, max 1 MiB (`PULSEOPS_INGEST_MAX_BYTES`).
+
+```json
+{
+  "service": "Order Service",
+  "events": [
+    {"type": "performance", "name": "GET /orders/{id}", "timestamp": "2026-11-21T10:15:30Z",
+     "httpMethod": "GET", "route": "/orders/{id}", "statusCode": 200, "durationMs": 42.5,
+     "traceId": "4bf92f3577b34da6a3ce929d0e0e4736", "attributes": {"region": "ap-south-1"}},
+    {"type": "error", "name": "PaymentDeclined", "timestamp": "2026-11-21T10:15:31Z",
+     "message": "Card issuer declined", "errorType": "PaymentException", "stackTrace": "..."},
+    {"type": "metric", "name": "queue.depth", "timestamp": "2026-11-21T10:15:32Z", "value": 17, "unit": "jobs"},
+    {"type": "business", "name": "order.placed", "timestamp": "2026-11-21T10:15:33Z", "attributes": {"amount": 49.9}}
+  ]
+}
+```
+
+| Field | Rules |
+|---|---|
+| `service` | Required for project-wide keys (must already exist — services are never auto-created); optional for service-scoped keys but must match |
+| `events` | 1–500 per batch (`PULSEOPS_INGEST_MAX_BATCH`); the whole batch is rejected if any event is invalid |
+| `type` | `custom`, `error`, `performance`, `metric`, `business` |
+| `name` | 1–200 printable characters |
+| `timestamp` | ISO-8601 with offset; not older than 7 days, not more than 5 minutes in the future |
+| `attributes` | ≤ 50 keys (≤ 100 chars); values string (≤ 1000 chars), number or boolean |
+| performance | `durationMs` 0–3,600,000 required; `statusCode` 100–599; `route` (template) or `path` (raw path, templated automatically: `/orders/123` → `/orders/{id}`). Without route/path it is stored as a non-HTTP measurement |
+| metric | `value` (finite number) required, `unit` optional |
+| error | `message` (≤ 4000, truncated), `errorType`, `stackTrace` (≤ 16000, truncated); also written as an ERROR log line |
+| `traceId` / `spanId` | 32 / 16 hex characters (W3C), optional |
+
+**Responses:** **202** `{batchId, accepted}` once validated and queued (processing is asynchronous) · 400 `VALIDATION_FAILED` with `fieldErrors` like `events[3].timestamp` / `MALFORMED_JSON` / `SERVICE_REQUIRED` · 401 `INVALID_CREDENTIAL` / `CREDENTIAL_REVOKED` / `CREDENTIAL_EXPIRED` · 403 `SERVICE_SCOPE_MISMATCH` / `PROJECT_ARCHIVED` / `SERVICE_ARCHIVED` / `INGESTION_DISABLED` · 404 `UNKNOWN_SERVICE` · 413 `PAYLOAD_TOO_LARGE` · 415 (non-JSON or compressed) · 429 `RATE_LIMITED` (600 batches/min/key) and 503 `INGEST_BUSY` (queue full), both with `Retry-After`.
+
+**Privacy:** attributes whose names indicate secrets (password, token, authorization, cookie, API key, card number, CVV, …) are stored as `[REDACTED]`; bearer tokens, JWTs, PulseOps keys, URL credentials, `password=…` pairs and Luhn-valid card numbers are scrubbed from all text.
+
 ---
 
-*Pending:* projects/services (Phase 4), credentials & onboarding (Phase 5), REST ingestion `POST /api/v1/ingest/v1/events` (Phase 6), OTLP `/v1/traces|metrics|logs` (Phase 7).
+*Pending:* OTLP/HTTP receiver at `/otlp/v1/traces|metrics|logs` (Phase 7); monitoring query APIs (Phases 9–11).

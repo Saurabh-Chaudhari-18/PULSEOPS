@@ -85,7 +85,10 @@ No secrets are ever committed; no variable is undocumented. (`deployment/.env.ex
 | `PULSEOPS_FORWARD_HEADERS` | `none` | `native`/`framework` ONLY behind a trusted reverse proxy |
 | `PULSEOPS_PORT` | `8080` | HTTP port |
 | `PULSEOPS_ML_URL` / `PULSEOPS_ML_SECRET` | `http://localhost:8500` / *(empty)* | ML service (Phase 12) |
-| `PULSEOPS_INGEST_MAX_BYTES` / `PULSEOPS_INGEST_MAX_BATCH` | `1048576` / `500` | Ingestion limits (Phase 6) |
+| `PULSEOPS_INGEST_PUBLIC_URL` | `http://localhost:8080` | URL customer apps use to reach ingestion (shown in setup instructions) |
+| `PULSEOPS_INGEST_MAX_BYTES` / `PULSEOPS_INGEST_MAX_BATCH` | `1048576` / `500` | Request body limit / events per batch |
+| `PULSEOPS_INGEST_QUEUE_CAPACITY` / `PULSEOPS_INGEST_WORKERS` | `200` / `2` | Buffered batches before 503 / processing threads |
+| `PULSEOPS_INGEST_RATE_PER_KEY` | `600` | Batches per minute per integration key |
 | `PULSEOPS_TEST_DB_URL` / `_USER` / `_PASSWORD` | *(unset)* | Enables the real-PostgreSQL tenant isolation integration test |
 
 ## Trying the auth flow locally (dev profile)
@@ -104,6 +107,17 @@ curl -s -X POST localhost:8080/api/v1/organizations -H "Authorization: Bearer <a
   -H 'Content-Type: application/json' -d '{"name":"Acme"}'
 # 5. Refresh (rotates the cookie)
 curl -s -b cookies.txt -c cookies.txt -X POST localhost:8080/api/v1/auth/refresh -H 'X-PulseOps-Client: web'
+```
+
+### Sending telemetry (after creating a project, a service named "Order Service" and a key)
+
+```bash
+curl -s -X POST localhost:8080/api/v1/ingest/v1/events -H 'Content-Type: application/json' \
+  -H "X-PulseOps-Key: $PULSEOPS_INGEST_KEY" \
+  -d '{"service":"Order Service","events":[{"type":"performance","name":"GET /orders/{id}",
+       "timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","httpMethod":"GET","path":"/orders/42",
+       "statusCode":200,"durationMs":37}]}'
+# → 202 {"batchId":"…","accepted":1}; the service's integration status turns CONNECTED.
 ```
 
 Modern browsers and recent curl versions treat `http://localhost` as a secure context and keep Secure cookies. If your client drops the refresh cookie over plain HTTP, set `PULSEOPS_COOKIE_SECURE=false` for local development only.

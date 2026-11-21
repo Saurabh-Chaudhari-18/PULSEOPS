@@ -23,7 +23,7 @@ public final class TestProperties {
                 new PulseOpsProperties.Auth(required, Duration.ofHours(24), Duration.ofMinutes(30)),
                 new PulseOpsProperties.Mail(true, "no-reply@pulseops.test"),
                 new PulseOpsProperties.Ml("http://localhost:8500", null),
-                new PulseOpsProperties.Ingest(1_048_576, 500));
+                new PulseOpsProperties.Ingest("https://ingest.pulseops.test", 1_048_576, 500, 200, 2, 600));
     }
 
     public static PulseOpsProperties defaults() {

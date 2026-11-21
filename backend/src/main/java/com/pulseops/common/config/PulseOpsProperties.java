@@ -49,8 +49,23 @@ public record PulseOpsProperties(
     public record Ml(@DefaultValue("http://localhost:8500") String baseUrl, String sharedSecret) {
     }
 
+    /**
+     * Ingestion settings.
+     *
+     * @param publicBaseUrl          URL customers' applications use to reach PulseOps ingestion
+     *                               (shown in installation instructions)
+     * @param maxPayloadBytes        request body limit
+     * @param maxBatchEvents         events per REST batch
+     * @param queueCapacity          batches buffered for asynchronous processing before 503
+     * @param workerThreads          processing threads
+     * @param batchesPerMinutePerKey per-credential rate limit
+     */
     public record Ingest(
+            @DefaultValue("http://localhost:8080") String publicBaseUrl,
             @DefaultValue("1048576") int maxPayloadBytes,
-            @DefaultValue("500") int maxBatchEvents) {
+            @DefaultValue("500") int maxBatchEvents,
+            @DefaultValue("200") int queueCapacity,
+            @DefaultValue("2") int workerThreads,
+            @DefaultValue("600") int batchesPerMinutePerKey) {
     }
 }

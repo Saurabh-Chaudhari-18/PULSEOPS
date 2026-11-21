@@ -9,6 +9,7 @@ import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -31,9 +32,23 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    /** Seconds clients should wait after 429/503 before retrying. */
+    static final String RETRY_AFTER_SECONDS = "30";
+
+    @ExceptionHandler(ValidationFailedException.class)
+    ResponseEntity<ApiError> handleValidationFailed(ValidationFailedException ex, HttpServletRequest req) {
+        ApiError body = new ApiError(Instant.now(), 400, ex.code(), ex.getMessage(), req.getRequestURI(),
+                ex.violations());
+        return ResponseEntity.badRequest().body(body);
+    }
+
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ApiError> handleApi(ApiException ex, HttpServletRequest req) {
-        return respond(ex.status(), ex.code(), ex.getMessage(), req);
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(ex.status());
+        if (ex.status() == HttpStatus.TOO_MANY_REQUESTS || ex.status() == HttpStatus.SERVICE_UNAVAILABLE) {
+            builder.header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS);
+        }
+        return builder.body(ApiError.of(ex.status().value(), ex.code(), ex.getMessage(), req.getRequestURI()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
