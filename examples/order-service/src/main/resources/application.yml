@@ -1,0 +1,36 @@
+# PulseOps sample order service. No telemetry settings here: the OpenTelemetry Java agent is
+# configured entirely through OTEL_* environment variables (see README.md / run scripts).
+server:
+  port: ${SAMPLE_PORT:8081}
+  # Loopback only: the /admin/chaos endpoint is unauthenticated by design (demo tool).
+  address: ${SAMPLE_BIND_ADDRESS:127.0.0.1}
+
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: jdbc:h2:mem:orders;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+sample:
+  traffic:
+    # Built-in load generator: requests per second against this service (0 = off).
+    requests-per-second: ${SAMPLE_TRAFFIC_RPS:2}
+  payment:
+    # Orders above this amount are declined by the simulated payment provider.
+    limit-cents: 100000
+
+logging:
+  level:
+    com.pulseops.sample: INFO

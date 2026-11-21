@@ -16,7 +16,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 5 | API Credentials and Integration Onboarding | COMPLETED |
 | 6 | REST Telemetry Ingestion | COMPLETED |
 | 7 | OpenTelemetry OTLP Ingestion | COMPLETED |
-| 8 | Java Sample Application Integration | NOT STARTED |
+| 8 | Java Sample Application Integration | IMPLEMENTED — awaiting PC run |
 | 9 | Application and API Monitoring | NOT STARTED |
 | 10 | Database Monitoring | NOT STARTED |
 | 11 | Logs and Distributed Traces | NOT STARTED |
@@ -155,6 +155,17 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - ✅ Compiled and executed (JDK-only, real JUnit test sources with a minimal runner): `OtlpMappingTest` (52 assertions), `OtlpPayloadTest` (6, incl. 48 KB → 50 MB gzip bomb stopped), `OtlpStatusTest` (12, wire bytes checked by hand).
 - ✅ Offline javac checks over 183 files: no errors except absent external libraries.
 
-**Tests executed on the developer PC (2026-11-21, JDK 25, IntelliJ "All in pulseops-backend", exit code 0 — no failures):** compiles against `opentelemetry-proto` 1.5.0-alpha / `protobuf-java` 4.28.3; Flyway applied V11 to the existing V10 database; `OtlpDecoderTest`, `OtlpIngestServiceTest`, the updated `TelemetryProcessorTest`, and the end-to-end `FullJourneyIntegrationTest.openTelemetryJavaAgentExportsBecomeTracesLogsDbCallsAndMetrics` (gzip trace export with partial rejection, logs, metrics, protobuf error bodies, CONNECTED, span dedupe, redaction, stored rows checked under RLS) all pass alongside every earlier test. The `db down` stack trace in the log is the expected output of `storageFailureIsCountedAndDoesNotMarkConnected`.
+**Tests executed on the developer PC (2026-11-21, JDK 25, IntelliJ "All in pulseops-backend", **223/223 tests passed**, 9.3 s):** compiles against `opentelemetry-proto` 1.5.0-alpha / `protobuf-java` 4.28.3; Flyway applied V11 to the existing V10 database; `OtlpDecoderTest`, `OtlpIngestServiceTest`, the updated `TelemetryProcessorTest`, and the end-to-end `FullJourneyIntegrationTest.openTelemetryJavaAgentExportsBecomeTracesLogsDbCallsAndMetrics` (gzip trace export with partial rejection, logs, metrics, protobuf error bodies, CONNECTED, span dedupe, redaction, stored rows checked under RLS) all pass alongside every earlier test. The `db down` stack trace in the log is the expected output of `storageFailureIsCountedAndDoesNotMarkConnected`.
 
-**Next:** Phase 8 (sample Spring Boot application instrumented with the Java agent) or Phase 12 (Python anomaly detection — fully testable here).
+## Phase 8 — Java Sample Application Integration — IMPLEMENTED, awaiting PC run (2026-11-21)
+
+**Completed (code):** `examples/order-service` — Spring Boot 3.5.6 order service with no observability code: order reads/lists/creation (JPA on H2), an inventory API called over real HTTP (CLIENT→SERVER trace hop), a simulated payment provider (402 + WARN log above a limit), unknown SKUs (422), validation errors (400), a sales report query, a built-in asynchronous traffic generator (~2 req/s), and runtime fault injection (`/admin/chaos`: `latency`, `errors`, `slow-db` via an H2 sleeping function so the delay is on the JDBC span, `outage`). Loopback-only by default because the chaos endpoint is unauthenticated.
+- `run-with-agent.ps1` / `.sh`: download a pinned OpenTelemetry Java agent (2.32.0) on first use and start the app with the standard `OTEL_*` settings from the PulseOps installation guide (http/protobuf, gzip, `x-pulseops-key`).
+- `scripts/dev-bootstrap.ps1` / `.sh`: create or reuse the demo account, organization, project and service, select the Java-agent integration and issue a service-scoped key; `scripts/dev-status.ps1` shows the connection status.
+- README with the full Windows walkthrough and SQL to inspect stored traces, API metrics, DB operations, logs and metrics before the dashboards exist.
+
+**Tests executed (cloud):** offline javac checks over the sample's 18 files (no errors beyond absent libraries); `dev-bootstrap.sh` run against a mock of the PulseOps API (first run creates, second run reuses, wrong password fails cleanly with exit 1).
+
+**Pending on the PC:** `OrderServiceApplicationTest` (runs during Maven `package`: reads, 404, order through inventory + payment, 402/422/400, inventory fault → 503, slow-db fault slows the query, chaos presets); the PowerShell scripts (not runnable here); and the acceptance run: agent attached → service CONNECTED → spans, API metrics, DB operations, logs and metric points stored for `order-service`.
+
+**Next:** Phase 9 (application and API monitoring query APIs) or Phase 12 (Python anomaly detection — fully testable here).

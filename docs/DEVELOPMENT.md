@@ -151,3 +151,10 @@ Modern browsers and recent curl versions treat `http://localhost` as a secure co
 - Module boundaries: see docs/ARCHITECTURE.md §2. No cross-module repository access.
 - Schema changes: new Flyway migration only — never edit an applied migration, never use `ddl-auto=update`.
 - Every phase updates docs/IMPLEMENTATION_STATUS.md; significant choices get an ADR in docs/DECISIONS.md.
+
+## Running the backend with real telemetry
+
+`examples/order-service/README.md` walks through starting the backend against a local
+database, creating a demo service and key (`scripts/dev-bootstrap.ps1`), and running the
+sample service with the OpenTelemetry Java agent so PulseOps receives real traces, logs
+and metrics.
