@@ -3,6 +3,7 @@ package com.pulseops.common.security;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import com.pulseops.common.config.PulseOpsProperties;
@@ -35,7 +36,9 @@ public class JwtService {
     }
 
     public AccessToken issue(UUID userId, String email) {
-        Instant now = clock.instant();
+        // JWT iat/exp are whole seconds (NumericDate). Truncate so the expiresAt we report to
+        // clients equals the token's real expiry instead of being up to 1 s later.
+        Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
         Instant expiresAt = now.plus(ttl);
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(ISSUER)

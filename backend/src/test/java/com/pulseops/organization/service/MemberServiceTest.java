@@ -33,7 +33,9 @@ import com.pulseops.user.repository.UserRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.BeanUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class MemberServiceTest {
 
@@ -158,12 +160,19 @@ class MemberServiceTest {
                 Set.of(Permissions.ORG_MEMBERS_MANAGE));
     }
 
+    /**
+     * Real Role instances (not mocks): calling a mock's getter inside another stubbing's
+     * thenReturn(...) causes UnfinishedStubbingException. Roles are read-only entities, so
+     * their fields are set reflectively exactly as Hibernate would.
+     */
     private static Role role(String name, boolean owner) {
-        Role role = mock(Role.class);
-        UUID id = UUID.randomUUID();
-        lenient().when(role.getId()).thenReturn(id);
-        lenient().when(role.getName()).thenReturn(name);
-        lenient().when(role.isOwnerRole()).thenReturn(owner);
+        Role role = BeanUtils.instantiateClass(Role.class);
+        ReflectionTestUtils.setField(role, "id", UUID.randomUUID());
+        ReflectionTestUtils.setField(role, "name", name);
+        ReflectionTestUtils.setField(role, "system", true);
+        if (role.isOwnerRole() != owner) {
+            throw new IllegalStateException("role fixture mismatch: " + name);
+        }
         return role;
     }
 }

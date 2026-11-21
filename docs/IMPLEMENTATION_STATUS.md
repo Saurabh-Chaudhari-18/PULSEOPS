@@ -89,7 +89,10 @@ Last updated: 2026-11-21
 - ✅ Every SQL statement embedded in the Java services executed against PostgreSQL under the same tenant/user contexts the code sets (access resolver, org listing, member listing, role catalog, audit insert/list, platform vs tenant audit rows) — correct results; forged platform audit row from a tenant context rejected by RLS.
 - ✅ javac parser over all 91 Java files — 0 syntax errors.
 - ✅ Full javac attribution without dependencies — every remaining error is attributable to absent external libraries (Spring/JPA/AssertJ/Mockito); 0 errors in references between PulseOps classes (ADR-013).
-- ⏳ **Not yet run:** JUnit/Mockito unit tests (rate limiter, tokens, JWT round-trip/forgery/expiry, password policy, slugs, refresh rotation & reuse detection, login/registration enumeration defences, password reset, member role invariants, tenant interceptor) and `TenantIsolationIntegrationTest` (real RLS through a single-connection pool). Application boot (Hibernate `validate`) also unverified.
+- ✅ **First real JUnit run (2026-11-21, developer PC, IntelliJ 2025.3, JDK 25, Spring Boot 3.5.6) on commit 129a6b1:** all main code **compiled against the real Spring/Hibernate/Nimbus libraries**; 69 tests: 65 passed, 2 skipped by design (`TenantIsolationIntegrationTest`, no `PULSEOPS_TEST_DB_URL`), **2 failed → fixed**:
+  - `JwtServiceTest`: reported `expiresAt` kept nanoseconds while the JWT `exp` claim is whole seconds → real (minor) bug; `JwtService` now truncates to seconds.
+  - `MemberServiceTest`: test misuse — a mock's getter was called inside another stubbing's `thenReturn` (`UnfinishedStubbingException`); role fixtures are now real `Role` objects.
+- ⏳ Re-run pending for the fixes (and for Phases 4–6 tests, which were not in that run). Previously listed as not yet run: JUnit/Mockito unit tests (rate limiter, tokens, JWT round-trip/forgery/expiry, password policy, slugs, refresh rotation & reuse detection, login/registration enumeration defences, password reset, member role invariants, tenant interceptor) and `TenantIsolationIntegrationTest` (real RLS through a single-connection pool). Application boot (Hibernate `validate`) also unverified.
 
 **Acceptance criteria (Phase 3 is COMPLETED only when all pass)**
 1. `mvn test` green, including `TenantIsolationIntegrationTest` against PostgreSQL. ⏳

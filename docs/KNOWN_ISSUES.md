@@ -2,7 +2,7 @@
 
 | # | Area | Issue | Status |
 |---|---|---|---|
-| 1 | Build environment | Package registries (Maven Central, npm, PyPI) are blocked in both the cloud build workspace and the PC-side workspace. Java code is **syntax- and cross-reference-checked but not compiled against Spring**, and the JUnit tests are **written but not executed** (ADR-013). SQL is verified against PostgreSQL 16. | OPEN — enable package managers (claude.ai Settings → Capabilities), or run `mvn test` locally |
+| 1 | Build environment | Package registries (Maven Central, npm, PyPI) are blocked in both the cloud build workspace and the PC-side workspace. Java code is **syntax- and cross-reference-checked but not compiled against Spring**, and the JUnit tests are **written but not executed** (ADR-013). SQL is verified against PostgreSQL 16. | MITIGATED — tests now run on the developer PC (IntelliJ). First run: Phase 3 compiles against real Spring; 65/67 passed, 2 failures fixed (see IMPLEMENTATION_STATUS). Enabling package managers in claude.ai Settings → Capabilities would let builds run in the cloud too |
 | 2 | Versions | Dependency versions in `backend/pom.xml` and `frontend/package.json` are pinned from last-known stable lines (ADR-008); re-verify at first online build. | OPEN |
 | 3 | Database | Retention cleanup jobs and storage monitoring land in later phases; telemetry tables are unbounded until then. Expired refresh/action tokens have repository delete methods but no scheduled job yet. | PLANNED (Phase 9+/17) |
 | 4 | RLS | ~~Backend tenant wiring pending~~ — implemented in Phase 3 (ADR-009). | RESOLVED |
