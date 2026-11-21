@@ -15,7 +15,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 4 | Projects, Services and Integration Management | COMPLETED |
 | 5 | API Credentials and Integration Onboarding | COMPLETED |
 | 6 | REST Telemetry Ingestion | COMPLETED |
-| 7 | OpenTelemetry OTLP Ingestion | IMPLEMENTED — awaiting PC build/test run |
+| 7 | OpenTelemetry OTLP Ingestion | COMPLETED |
 | 8 | Java Sample Application Integration | NOT STARTED |
 | 9 | Application and API Monitoring | NOT STARTED |
 | 10 | Database Monitoring | NOT STARTED |
@@ -138,7 +138,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Acceptance (pending build):** sample batch → 202 → rows in `telemetry_events`/`api_metrics`/`application_logs` → service CONNECTED; revoked/expired/invalid keys 401; oversize 413; invalid events 400 with field paths; cross-service/tenant writes impossible.
 
-## Phase 7 — OpenTelemetry OTLP Ingestion — IMPLEMENTED, awaiting PC build (2026-11-21)
+## Phase 7 — OpenTelemetry OTLP Ingestion — COMPLETED (2026-11-21)
 
 **Completed (code):** OTLP/HTTP binary-protobuf receiver at `/otlp/v1/traces|logs|metrics` (ADR-019) using `io.opentelemetry.proto:opentelemetry-proto:1.5.0-alpha`.
 - `otlp.decode`: `OtlpPayload` (identity/gzip, 16 MiB decompression cap), `OtlpDecoder` (ID/timestamp validation, AnyValue conversion, kind/status mapping, per-resource grouping).
@@ -155,6 +155,6 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - ✅ Compiled and executed (JDK-only, real JUnit test sources with a minimal runner): `OtlpMappingTest` (52 assertions), `OtlpPayloadTest` (6, incl. 48 KB → 50 MB gzip bomb stopped), `OtlpStatusTest` (12, wire bytes checked by hand).
 - ✅ Offline javac checks over 183 files: no errors except absent external libraries.
 
-**Pending on the PC (needs Maven):** `OtlpDecoderTest`, `OtlpIngestServiceTest`, updated `TelemetryProcessorTest`, and the new end-to-end test `FullJourneyIntegrationTest.openTelemetryJavaAgentExportsBecomeTracesLogsDbCallsAndMetrics` (gzip trace export with partial rejection, logs, metrics, protobuf errors, CONNECTED, span dedupe, redaction and stored rows checked under RLS).
+**Tests executed on the developer PC (2026-11-21, JDK 25, IntelliJ "All in pulseops-backend", exit code 0 — no failures):** compiles against `opentelemetry-proto` 1.5.0-alpha / `protobuf-java` 4.28.3; Flyway applied V11 to the existing V10 database; `OtlpDecoderTest`, `OtlpIngestServiceTest`, the updated `TelemetryProcessorTest`, and the end-to-end `FullJourneyIntegrationTest.openTelemetryJavaAgentExportsBecomeTracesLogsDbCallsAndMetrics` (gzip trace export with partial rejection, logs, metrics, protobuf error bodies, CONNECTED, span dedupe, redaction, stored rows checked under RLS) all pass alongside every earlier test. The `db down` stack trace in the log is the expected output of `storageFailureIsCountedAndDoesNotMarkConnected`.
 
 **Next:** Phase 8 (sample Spring Boot application instrumented with the Java agent) or Phase 12 (Python anomaly detection — fully testable here).
