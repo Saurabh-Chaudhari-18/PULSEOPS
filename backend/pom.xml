@@ -48,6 +48,12 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
+    <!-- SMTP delivery for verification/reset emails and (later) alert notifications.
+         Only active when SPRING_MAIL_HOST is configured. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-mail</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.postgresql</groupId>

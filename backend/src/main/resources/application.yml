@@ -1,6 +1,6 @@
 # PulseOps backend — base configuration.
 # Every environment-specific value comes from environment variables.
-# All variables are documented in deployment/.env.example and docs/DEVELOPMENT.md.
+# All variables are documented in docs/DEVELOPMENT.md (and deployment/.env.example in Phase 18).
 
 spring:
   application:
@@ -18,14 +18,30 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  # SMTP: set SPRING_MAIL_HOST / SPRING_MAIL_PORT / SPRING_MAIL_USERNAME / SPRING_MAIL_PASSWORD
+  # directly as environment variables. Deliberately NOT mapped here: an empty
+  # spring.mail.host would still activate Spring's mail auto-configuration.
 
 pulseops:
+  # Public base URL of the PulseOps web UI; used to build links in emails.
+  public-url: ${PULSEOPS_PUBLIC_URL:http://localhost:5173}
   security:
     jwt:
-      # HMAC secret for access tokens; MUST be set per environment (>= 32 bytes, base64).
+      # HMAC-SHA256 secret for access tokens, base64-encoded, >= 32 bytes decoded.
+      # The application refuses to start without it. Generate: openssl rand -base64 48
       secret: ${PULSEOPS_JWT_SECRET:}
       access-token-ttl: ${PULSEOPS_JWT_ACCESS_TTL:15m}
       refresh-token-ttl: ${PULSEOPS_JWT_REFRESH_TTL:14d}
+    cookie:
+      # Refresh-token cookie Secure flag. Keep true everywhere except plain-HTTP non-localhost dev.
+      secure: ${PULSEOPS_COOKIE_SECURE:true}
+    cors-allowed-origins: ${PULSEOPS_CORS_ORIGINS:http://localhost:5173}
+  auth:
+    require-email-verification: ${PULSEOPS_REQUIRE_EMAIL_VERIFICATION:true}
+    verification-token-ttl: ${PULSEOPS_VERIFICATION_TOKEN_TTL:24h}
+    reset-token-ttl: ${PULSEOPS_RESET_TOKEN_TTL:30m}
+  mail:
+    from: ${PULSEOPS_MAIL_FROM:no-reply@pulseops.local}
   ml:
     base-url: ${PULSEOPS_ML_URL:http://localhost:8500}
     shared-secret: ${PULSEOPS_ML_SECRET:}
@@ -35,27 +51,33 @@ pulseops:
 
 server:
   port: ${PULSEOPS_PORT:8080}
+  # Set to "native" or "framework" ONLY behind a trusted reverse proxy, so client IPs
+  # (rate limiting, audit) come from X-Forwarded-For. Default trusts no proxy headers.
+  forward-headers-strategy: ${PULSEOPS_FORWARD_HEADERS:none}
+  error:
+    include-message: never
+    include-stacktrace: never
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
 
 ---
-# Lightweight local development profile (dev-lite): verbose errors, dev mail mode.
+# Lightweight local development profile (dev-lite).
 spring:
   config:
     activate:
       on-profile: dev
-  jpa:
-    properties:
-      hibernate.format_sql: true
 
 pulseops:
   mail:
-    # Development email-verification mode: verification links are logged,
-    # not sent. Documented in docs/DEVELOPMENT.md. Never enable in production.
+    # Development email mode: verification/reset links are written to the log,
+    # not emailed. Bound to the dev profile only, so production is unaffected.
     dev-log-only: true
 
 ---

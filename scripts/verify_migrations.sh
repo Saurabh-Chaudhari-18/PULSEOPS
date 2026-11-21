@@ -78,6 +78,52 @@ DO $$ BEGIN
   IF (SELECT count(*) FROM projects) <> 0 THEN RAISE EXCEPTION 'RLS breach: read without context'; END IF;
 END $$;
 
+-- V9 user-scoped visibility: with only a user context, a user sees their own memberships
+-- and organizations, nothing else, and cannot write into another organization.
+INSERT INTO users (id,email,password_hash,full_name,status) VALUES
+ ('10000000-0000-0000-0000-000000000002','bob@globex.test','x','Bob','active');
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000a';
+INSERT INTO organization_members (organization_id,user_id,role_id) VALUES
+ ('20000000-0000-0000-0000-00000000000a','10000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001');
+COMMIT;
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000b';
+INSERT INTO organization_members (organization_id,user_id,role_id) VALUES
+ ('20000000-0000-0000-0000-00000000000b','10000000-0000-0000-0000-000000000002','b0000000-0000-0000-0000-000000000001');
+COMMIT;
+
+BEGIN;
+SET LOCAL app.current_user_id = '10000000-0000-0000-0000-000000000001';
+DO $$ BEGIN
+  IF (SELECT count(*) FROM organization_members) <> 1 THEN RAISE EXCEPTION 'user sees foreign memberships'; END IF;
+  IF (SELECT string_agg(slug, ',') FROM organizations) IS DISTINCT FROM 'acme' THEN
+    RAISE EXCEPTION 'user org visibility wrong';
+  END IF;
+  IF (SELECT count(*) FROM projects) <> 0 THEN RAISE EXCEPTION 'user context exposed tenant data'; END IF;
+END $$;
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO organization_members (organization_id,user_id,role_id) VALUES
+     ('20000000-0000-0000-0000-00000000000b','10000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001');
+    RAISE EXCEPTION 'RLS breach: user context allowed joining another organization';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+COMMIT;
+
+-- A removed member loses organization visibility.
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000a';
+UPDATE organization_members SET status = 'removed' WHERE user_id = '10000000-0000-0000-0000-000000000001';
+COMMIT;
+BEGIN;
+SET LOCAL app.current_user_id = '10000000-0000-0000-0000-000000000001';
+DO $$ BEGIN
+  IF (SELECT count(*) FROM organizations) <> 0 THEN RAISE EXCEPTION 'removed member still sees organization'; END IF;
+END $$;
+COMMIT;
+
 -- Seed catalog present.
 DO $$ BEGIN
   IF (SELECT count(*) FROM permissions) < 11 THEN RAISE EXCEPTION 'permissions seed missing'; END IF;

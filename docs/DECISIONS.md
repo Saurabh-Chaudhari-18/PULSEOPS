@@ -51,3 +51,33 @@ Short, dated records of decisions that shape the system. Newest last.
 **Decision:** Spring Boot pinned at 3.5.6 / Java 21; frontend pinned at React 19 / Vite 7 / MUI 7 / Recharts 3 / React Router 7 / TanStack Query 5. To be re-verified (and bumped to latest stable) at the first build once registry access is enabled.
 
 **Why:** Registries are currently unreachable from the build workspace; versions chosen from last-known stable lines.
+
+## ADR-009 — Tenant context applied per pooled-connection checkout; user-scoped RLS (2026-11-21)
+
+**Decision:** A `DataSource` wrapper (`TenantAwareDataSource`) runs `set_config('app.current_org_id', …, false), set_config('app.current_user_id', …, false)` on **every** connection checkout, writing empty strings when no context is bound. V9 adds permissive policies so a user context alone can read *its own* memberships and the organizations it actively belongs to.
+
+**Why:** Session-level settings overwritten on every checkout cannot leak between pooled requests (verified with a single-connection pool test). `SET LOCAL` per transaction would need hooks in every transaction path, including JdbcTemplate outside JPA. The user-scoped policies are required because membership must be checked *before* an organization context exists. Rule that follows: the tenant context must be bound before a transaction opens (the interceptor does this; organization creation binds the new org's ID first).
+
+## ADR-010 — Application-assigned UUIDs (2026-11-21)
+
+**Decision:** Entities get `UUID.randomUUID()` in Java (`BaseEntity` implements `Persistable` for correct INSERT semantics); DB defaults remain for SQL-side inserts.
+
+**Why:** Creating an organization under RLS requires knowing its ID before the INSERT so the tenant context can be bound to it.
+
+## ADR-011 — Refresh token in an HttpOnly SameSite=Strict cookie (2026-11-21)
+
+**Decision:** Access token in the JSON body (kept in memory by the SPA); refresh token only in an HttpOnly, Secure, SameSite=Strict cookie scoped to `/api/v1/auth`, plus a required custom header on cookie endpoints.
+
+**Why:** XSS cannot read the long-lived credential; CSRF is blocked by SameSite plus the preflight-gated header; no CSRF token machinery is needed for bearer-authenticated API calls.
+
+## ADR-012 — Membership and permissions resolved per request (2026-11-21)
+
+**Decision:** JWTs carry only the user ID. Each organization-scoped request resolves membership + permissions with one indexed query.
+
+**Why:** Removing a member or changing a role takes effect immediately instead of after token expiry; tokens stay small. Cost: one query per request (cacheable later if profiling shows need).
+
+## ADR-013 — Offline verification method while registries are blocked (2026-11-21)
+
+**Decision:** Until Maven can run, Java code is verified by (1) a javac-parser syntax check over all sources, (2) full javac attribution without dependencies, filtering out errors caused purely by absent external libraries, and (3) executing every embedded SQL statement against PostgreSQL 16 under the same tenant contexts the code sets. Unit tests are written but have **not been executed**.
+
+**Why:** Gives real evidence about our own code (syntax, cross-class types, SQL, RLS behaviour) without claiming more than was verified. Spring/Hibernate API usage is only validated by the first real build.

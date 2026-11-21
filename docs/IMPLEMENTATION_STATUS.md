@@ -2,7 +2,7 @@
 
 Statuses: `NOT STARTED` · `IN PROGRESS` · `BLOCKED` · `COMPLETED`
 
-Last updated: 2026-11-20
+Last updated: 2026-11-21
 
 ## Phase Overview
 
@@ -11,7 +11,7 @@ Last updated: 2026-11-20
 | 0 | Repository Inspection and Planning | COMPLETED |
 | 1 | Project Foundation and Development Environment | COMPLETED |
 | 2 | Database Schema and Migrations | COMPLETED |
-| 3 | Authentication and Multi-Tenant Organization Management | NOT STARTED |
+| 3 | Authentication and Multi-Tenant Organization Management | IN PROGRESS — code complete, awaiting first Maven build + test run |
 | 4 | Projects, Services and Integration Management | NOT STARTED |
 | 5 | API Credentials and Integration Onboarding | NOT STARTED |
 | 6 | REST Telemetry Ingestion | NOT STARTED |
@@ -67,6 +67,36 @@ Last updated: 2026-11-20
 
 ---
 
-## Phase 3 — Authentication and Multi-Tenant Organization Management — NOT STARTED
+## Phase 3 — Authentication and Multi-Tenant Organization Management — IN PROGRESS (2026-11-21)
 
-**Planned:** registration + email verification (dev log-only mode), login, JWT access tokens via OAuth2 resource server, rotating hashed refresh tokens with reuse detection, password reset, organization creation, membership + RBAC enforcement, tenant context filter (`SET LOCAL app.current_org_id`), audit logging of auth events, unit + integration tests. Requires working Maven builds (KNOWN_ISSUES #1).
+**Objectives:** registration with email verification, login, JWT access tokens, rotating refresh tokens with theft detection, logout/revocation, password reset, organization creation and management, team & role management, RBAC enforcement, tenant context wired into PostgreSQL RLS, audit logging.
+
+**Completed tasks (code)**
+- `common`: typed config (`PulseOpsProperties`), uniform errors (`ApiError`, `GlobalExceptionHandler`), security config (stateless JWT resource server, CORS allow-list, security headers, deny-by-default), JWT HS256 issue/validate with fail-fast secret validation, secure token generation + SHA-256 hashing, fixed-window rate limiter, pagination primitives, mail port (dev-log / SMTP, fail-fast when misconfigured, async + after-commit dispatch).
+- `common.tenancy`: `TenantContext`, `TenantAwareDataSource` (sets org + user settings on every pooled checkout), `TenantContextInterceptor` (membership + `@RequiresPermission` enforcement, 404 for non-members), `OrgAccess` argument resolver.
+- `auth`: register / verify-email / resend / login / refresh (rotation + reuse detection) / logout / forgot / reset; change password and sign-out-everywhere; HttpOnly SameSite=Strict refresh cookie + CSRF header guard; per-IP/per-email rate limits; enumeration-resistant responses.
+- `user`: profile read/update, password policy.
+- `organization`: create (creator → OWNER, RLS-safe ID-first creation), list mine, get, update, soft delete with slug confirmation; members list/add/change role/remove/leave with owner-only escalation and last-owner protection under row locks.
+- `rbac`: system role catalog, per-request access resolver, `/access` and `/roles` endpoints.
+- `audit`: transactional audit writer (org always from tenant context) + paginated, filterable audit log endpoint.
+- Migration **V9** user-scoped RLS policies.
+
+**Files created:** ~60 main classes across `common`, `auth`, `user`, `organization`, `rbac`, `audit`; `V9__user_scoped_rls.sql`; 15 test files (~60 test methods); docs `API.md`, `SECURITY.md`.
+**Files modified:** `pom.xml` (+spring-boot-starter-mail), `application.yml`, `PulseOpsApplication.java`, `scripts/verify_migrations.sh`, DATABASE / DEVELOPMENT / DECISIONS (ADR-009…013) / KNOWN_ISSUES.
+
+**Tests executed**
+- ✅ `scripts/verify_migrations.sh` (V1–V9) on PostgreSQL 16.15 — PASS, including new user-scope assertions.
+- ✅ Every SQL statement embedded in the Java services executed against PostgreSQL under the same tenant/user contexts the code sets (access resolver, org listing, member listing, role catalog, audit insert/list, platform vs tenant audit rows) — correct results; forged platform audit row from a tenant context rejected by RLS.
+- ✅ javac parser over all 91 Java files — 0 syntax errors.
+- ✅ Full javac attribution without dependencies — every remaining error is attributable to absent external libraries (Spring/JPA/AssertJ/Mockito); 0 errors in references between PulseOps classes (ADR-013).
+- ⏳ **Not yet run:** JUnit/Mockito unit tests (rate limiter, tokens, JWT round-trip/forgery/expiry, password policy, slugs, refresh rotation & reuse detection, login/registration enumeration defences, password reset, member role invariants, tenant interceptor) and `TenantIsolationIntegrationTest` (real RLS through a single-connection pool). Application boot (Hibernate `validate`) also unverified.
+
+**Acceptance criteria (Phase 3 is COMPLETED only when all pass)**
+1. `mvn test` green, including `TenantIsolationIntegrationTest` against PostgreSQL. ⏳
+2. App boots with `dev` profile; Flyway applies V1–V9; Hibernate validation passes. ⏳
+3. Manual journey from DEVELOPMENT.md works: register → dev-mail link → verify → login → create org → refresh rotates cookie → reused refresh token revokes sessions. ⏳
+4. Cross-tenant access returns 404 / RLS rejects cross-tenant writes. ✅ (DB level) ⏳ (HTTP level)
+
+**Pending tasks:** run the build + tests (blocked by KNOWN_ISSUES #1); invitation emails for unregistered users (deferred); scheduled cleanup of expired tokens (Phase 17).
+
+**Next steps:** once a build is possible, fix any compile/test failures, then mark Phase 3 COMPLETED and start Phase 4 (projects & services). Phase 4 work can proceed code-first in parallel if builds remain blocked.
