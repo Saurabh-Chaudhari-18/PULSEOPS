@@ -76,7 +76,14 @@ The script downloads the pinned OpenTelemetry Java agent into `examples/order-se
 ./scripts/dev-status.ps1      # status should become CONNECTED within ~10 seconds
 ```
 
-Until the monitoring screens exist (Phases 9–11) you can look at the stored data directly.
+See what the monitoring APIs report (health, request rate, error rate, p50/p95/p99 per
+endpoint, JVM CPU/heap):
+
+```powershell
+./scripts/dev-monitoring.ps1                 # add -Sort p95 or -Minutes 15 as you like
+```
+
+You can also look at the stored data directly.
 The `postgres` superuser bypasses row-level security, so use it only for this local check:
 
 ```powershell

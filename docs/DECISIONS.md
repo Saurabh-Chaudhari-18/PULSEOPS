@@ -118,3 +118,9 @@ Short, dated records of decisions that shape the system. Newest last.
 
 **Why:** gRPC would add Netty/grpc-java and a second port for little gain at this scale; OTLP/JSON is rarely used by agents. Keeping interpretation protobuf-free made it verifiable without a Maven build (ADR-013) and keeps protocol and semantics separable. Metrics are downsampled to one-minute aggregates at ingestion because raw OTLP metric streams (every instrument × attribute set × export interval) would dominate storage on an 8 GB/self-hosted target; the cost is that histogram bucket shapes are not kept (count/sum/min/max only), documented in KNOWN_ISSUES.
 
+## ADR-020 — Monitoring read model and default health rules (2026-11-23)
+
+**Decision:** Monitoring APIs aggregate `api_metrics` on the fly per request (SQL `GROUP BY` + `pulseops_histogram_sum`), computing percentiles in Java from the merged histogram. Windows are aligned to steps of 1 min–1 day, capped at 31 days and ≤ 1440 points. Service health uses fixed defaults taken from the specification's alert examples — CRITICAL at ≥ 5 % server errors or p95 ≥ 1000 ms, WARNING at ≥ 1 % or ≥ 500 ms — and is not judged below 20 requests. Only 5xx count as errors; 4xx are shown separately.
+
+**Why:** At the target scale (one-minute rows, a few dozen routes per service) on-the-fly aggregation over the `(service_id, bucket_start)` index is fast enough and always consistent with ingestion, so no rollup tables or caches are needed yet (revisit if 30-day queries exceed ~1 s). The health label is a transparent, documented rule with reasons attached, so users see *why* a service is flagged; learned baselines (Phase 12) and user-defined alert rules (Phase 15) will refine it rather than replace this explanation. Treating 4xx as client behaviour avoids flagging services for users' 404s.
+

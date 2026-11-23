@@ -17,7 +17,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 6 | REST Telemetry Ingestion | COMPLETED |
 | 7 | OpenTelemetry OTLP Ingestion | COMPLETED |
 | 8 | Java Sample Application Integration | COMPLETED |
-| 9 | Application and API Monitoring | NOT STARTED |
+| 9 | Application and API Monitoring | IMPLEMENTED — awaiting PC run |
 | 10 | Database Monitoring | NOT STARTED |
 | 11 | Logs and Distributed Traces | NOT STARTED |
 | 12 | Python ML Service and Anomaly Detection | NOT STARTED |
@@ -170,4 +170,20 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Notes from the run:** ports 8080 (Apache httpd) and 8090 (another desktop app) were taken on the PC, so the backend ran on `PULSEOPS_PORT=18080`; `dev-bootstrap.ps1` now prints `-BaseUrl/-OtlpEndpoint` hints for non-default ports. While the backend was down the agent logged connection-refused export failures and dropped that data (expected exporter behaviour).
 
-**Next:** Phase 9 (application and API monitoring query APIs) or Phase 12 (Python anomaly detection — fully testable here).
+**Next:** Phase 9.
+
+## Phase 9 — Application and API Monitoring — IMPLEMENTED, awaiting PC run (2026-11-23)
+
+**Completed (code):** `monitoring` module (ADR-020).
+- `TimeWindow`: from/to/step parsing, alignment, limits (31 days, ≤ 1440 points, automatic step for ≤ 360).
+- `ApiMonitoringService` over `api_metrics`: service summary (requests, req/s, 5xx/4xx, error rate, avg/p50/p95/p99/max from merged histograms, status classes, connection, health), time series for a service or one endpoint (gap-filled; empty buckets have null latency), endpoint list with 7 sort orders, search and limit, and the organization overview ("what needs attention": totals from the org-wide merged histogram, services by health, worst first).
+- `RuntimeMetricsService` over `metric_points`: JVM CPU, heap used/limit (summed over heap pools), threads, loaded classes — null when not reported.
+- `HealthRules`: NO_DATA / HEALTHY / WARNING / CRITICAL with explanations; `MonitoringSql` keeps all queries in one place.
+- `MonitoringController`: 5 read endpoints behind `telemetry.read` (API.md).
+
+**Tests executed (cloud):**
+- ✅ All 8 monitoring queries prepared and executed as `pulseops_app` under RLS on PostgreSQL 16 with fixture rows; results checked by hand (e.g. 140 requests / 10 server / 10 client errors; histograms merged across routes and minutes; 5-minute series buckets; heap = Eden 100 MB + Old 50 MB with non-heap excluded; CPU 0.2).
+- ✅ `TimeWindowTest` (15 checks) and `HealthRulesTest` (18 checks, incl. hand-computed p50/p95/p99 from a histogram) compiled and executed.
+- ✅ Offline javac checks over 194 files.
+
+**Pending on the PC:** `ApiMonitoringServiceTest` (series filling, sort orders, method validation, runtime points) and the extended OTLP journey test (summary, endpoints, endpoint series, runtime heap, overview, invalid range → 400, non-member → 404), plus a look at the live sample data through the new endpoints.

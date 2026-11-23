@@ -247,6 +247,56 @@ class FullJourneyIntegrationTest {
                     + "AND name = 'jvm.memory.used'", Long.class, svc)).isEqualTo(2L);
             return null;
         });
+
+        // 6. Monitoring APIs (Phase 9) read the same data back, percentiles from histograms.
+        String monitoring = "/api/v1/organizations/" + orgId + "/services/" + serviceId + "/monitoring";
+        JsonNode summary = body(call(carol, get(monitoring + "/summary"), null, 200));
+        for (int i = 0; i < 25 && summary.get("requests").asLong() < 2; i++) {   // retried export may lag
+            Thread.sleep(200);
+            summary = body(call(carol, get(monitoring + "/summary"), null, 200));
+        }
+        assertThat(summary.get("requests").asLong()).as("original export + retry").isEqualTo(2);
+        assertThat(summary.get("serverErrors").asLong()).isEqualTo(2);
+        assertThat(summary.get("errorRate").asDouble()).isEqualTo(1.0);
+        assertThat(summary.get("p95Ms").asDouble()).as("capped at the observed max").isEqualTo(120.0);
+        assertThat(summary.get("statusClasses").get("5xx").asLong()).isEqualTo(2);
+        assertThat(summary.get("connectionStatus").asText()).isEqualTo("CONNECTED");
+        assertThat(summary.get("health").get("status").asText()).as("2 requests: too few to judge")
+                .isEqualTo("HEALTHY");
+
+        JsonNode endpoints = body(call(carol, get(monitoring + "/endpoints?sort=p95"), null, 200));
+        assertThat(endpoints.get("endpoints")).hasSize(1);
+        JsonNode endpoint = endpoints.get("endpoints").get(0);
+        assertThat(endpoint.get("method").asText()).isEqualTo("GET");
+        assertThat(endpoint.get("route").asText()).isEqualTo("/orders/{id}");
+        assertThat(endpoint.get("avgMs").asDouble()).isEqualTo(120.0);
+
+        JsonNode series = body(call(carol, get(monitoring + "/timeseries?method=GET&route={route}", "/orders/{id}"),
+                null, 200));
+        long seriesRequests = 0;
+        for (JsonNode point : series.get("points")) {
+            seriesRequests += point.get("requests").asLong();
+        }
+        assertThat(series.get("points").size()).as("last hour, minute steps").isBetween(60, 61);
+        assertThat(seriesRequests).isEqualTo(2);
+
+        JsonNode runtime = body(call(carol, get(monitoring + "/runtime"), null, 200));
+        assertThat(runtime.get("available").asBoolean()).isTrue();
+        boolean heapSeen = false;
+        for (JsonNode point : runtime.get("points")) {
+            heapSeen |= point.get("heapUsedBytes").asDouble() == 200.0;
+        }
+        assertThat(heapSeen).as("average of the two heap gauge samples").isTrue();
+
+        JsonNode overview = body(call(carol, get("/api/v1/organizations/" + orgId + "/monitoring/overview"),
+                null, 200));
+        assertThat(overview.get("services").asInt()).isEqualTo(1);
+        assertThat(overview.get("connectedServices").asInt()).isEqualTo(1);
+        assertThat(overview.get("requests").asLong()).isEqualTo(2);
+
+        call(carol, get(monitoring + "/summary?from=not-a-time"), null, 400);
+        Session mallory = registerAndLogin("mallory-" + suffix + "@it.test");
+        call(mallory, get(monitoring + "/summary"), null, 404);
     }
 
     @Test

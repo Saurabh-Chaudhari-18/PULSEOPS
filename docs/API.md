@@ -187,4 +187,18 @@ Connection status: `NOT_CONNECTED` → `WAITING_FOR_DATA` (method chosen) → `C
 
 ---
 
-*Pending:* monitoring query APIs (Phases 9–11).
+## Monitoring — applications and APIs (JWT; permission `telemetry.read`)
+
+All under `/api/v1/organizations/{orgId}`. Time range: `from`, `to` as ISO-8601 instants (default: the last hour; at most 31 days; `to` ≤ now + 5 min), aligned to whole steps. Series `step` (seconds) is one of 60, 300, 900, 3600, 21600, 86400 — chosen automatically for ≤ 360 points unless given (≤ 1440 points). Latencies in ms, rates as fractions 0–1. **Absent data is null, never 0 ms**; a bucket without requests reports `requests: 0` and null latency. Percentiles are computed from merged latency histograms (ADR-014), never averaged. `errorRate` = 5xx / all requests; 4xx are reported separately as `clientErrors`.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /monitoring/overview?from&to&projectId` | Org totals (requests, req/s, error rate, p95 from the merged histogram), service counts by health, `attention` (CRITICAL/WARNING or connection ERROR, worst first) and `allServices` |
+| `GET /services/{id}/monitoring/summary?from&to` | Requests, req/s, server/client errors, error rate, avg/p50/p95/p99/max, counts per status class, connection status, `health` {status, reasons} |
+| `GET /services/{id}/monitoring/timeseries?from&to&step[&method&route]` | Evenly spaced points: requests, req/s, errors, error rate, avg/p50/p95/p99 — for the service, or one endpoint when `method` and `route` (the route template) are given |
+| `GET /services/{id}/monitoring/endpoints?from&to&sort&search&limit` | Endpoints (method + route template) with the same statistics and `lastSeen`; `sort` = `requests` (default), `errors`, `error_rate`, `p95`, `p99`, `avg`, `route`; `search` filters routes (contains); `limit` 1–200 (default 50) |
+| `GET /services/{id}/monitoring/runtime?from&to&step` | JVM runtime series from OTLP metrics when exported (OpenTelemetry Java agent 2.x names): `cpuUtilization` (0–1), `heapUsedBytes`, `heapLimitBytes`, `threads`, `loadedClasses`; `available=false` and nulls when the service sends none; `metricNames` lists what it does send |
+
+**Health** (ADR-020): `NO_DATA` (no requests), `HEALTHY` (also when fewer than 20 requests — too few to judge), `WARNING` (5xx rate ≥ 1 % or p95 ≥ 500 ms), `CRITICAL` (5xx rate ≥ 5 % or p95 ≥ 1000 ms), with human-readable `reasons`. Errors: 400 `INVALID_TIME_RANGE` / `INVALID_SORT` / `METHOD_REQUIRED` / `INVALID_METHOD`; 404 for unknown services or non-members.
+
+*Pending:* database monitoring (Phase 10), logs and traces (Phase 11).
