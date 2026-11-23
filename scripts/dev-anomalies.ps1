@@ -43,7 +43,7 @@ Write-Host ("  services {0}   series {1}   findings {2}" -f $st.servicesEvaluate
 if ($st.lastError) { Write-Host "  last error: $($st.lastError)" -ForegroundColor Yellow }
 
 $from = [DateTime]::UtcNow.AddMinutes(-$Minutes).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-$page = Invoke-Api GET "$api?from=$from&status=$Status&limit=30" -Token $token
+$page = Invoke-Api GET "$($api)?from=$from&status=$Status&limit=30" -Token $token
 Write-Host ""
 Write-Host "Anomalies ($Status, last $Minutes minutes)" -ForegroundColor Cyan
 if ($page.anomalies.Count -eq 0) { Write-Host "  none"; return }
