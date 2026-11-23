@@ -17,7 +17,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 6 | REST Telemetry Ingestion | COMPLETED |
 | 7 | OpenTelemetry OTLP Ingestion | COMPLETED |
 | 8 | Java Sample Application Integration | COMPLETED |
-| 9 | Application and API Monitoring | IMPLEMENTED — awaiting PC run |
+| 9 | Application and API Monitoring | COMPLETED |
 | 10 | Database Monitoring | NOT STARTED |
 | 11 | Logs and Distributed Traces | NOT STARTED |
 | 12 | Python ML Service and Anomaly Detection | NOT STARTED |
@@ -170,9 +170,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Notes from the run:** ports 8080 (Apache httpd) and 8090 (another desktop app) were taken on the PC, so the backend ran on `PULSEOPS_PORT=18080`; `dev-bootstrap.ps1` now prints `-BaseUrl/-OtlpEndpoint` hints for non-default ports. While the backend was down the agent logged connection-refused export failures and dropped that data (expected exporter behaviour).
 
-**Next:** Phase 9.
-
-## Phase 9 — Application and API Monitoring — IMPLEMENTED, awaiting PC run (2026-11-23)
+## Phase 9 — Application and API Monitoring — COMPLETED (2026-11-23)
 
 **Completed (code):** `monitoring` module (ADR-020).
 - `TimeWindow`: from/to/step parsing, alignment, limits (31 days, ≤ 1440 points, automatic step for ≤ 360).
@@ -186,4 +184,13 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - ✅ `TimeWindowTest` (15 checks) and `HealthRulesTest` (18 checks, incl. hand-computed p50/p95/p99 from a histogram) compiled and executed.
 - ✅ Offline javac checks over 194 files.
 
-**Pending on the PC:** `ApiMonitoringServiceTest` (series filling, sort orders, method validation, runtime points) and the extended OTLP journey test (summary, endpoints, endpoint series, runtime heap, overview, invalid range → 400, non-member → 404), plus a look at the live sample data through the new endpoints.
+**Tests executed on the developer PC (2026-11-23):** **233/233 passed** (11.7 s), including `ApiMonitoringServiceTest`, `TimeWindowTest`, `HealthRulesTest` and the extended OTLP journey (summary, endpoints, endpoint series, runtime heap, overview, 400 on a bad range, 404 for a non-member).
+
+**Acceptance on live data (sample service + Java agent, `scripts/dev-monitoring.ps1`):**
+- `errors` fault → service CRITICAL, reason "Server error rate 20.1 %"; only `POST /api/orders` and `GET /internal/inventory/{sku}` carried errors (47.8 % each), 4xx reported separately.
+- `slow-db` fault → CRITICAL, reason "p95 latency 1930 ms" with 0 % errors; `/api/orders/report` and `/api/orders/{id}` at ~1.5–2 s and first in the p95 sort, other endpoints unaffected.
+- After `normal`, the last-2-minutes window was HEALTHY (p95 10 ms).
+- JVM CPU, heap and thread counts reported from agent metrics.
+- Observed limitation: when nearly all requests sit just above a bucket bound (e.g. 1.5 s), p50/p95/p99 can coincide at the observed maximum — expected histogram resolution (ADR-014).
+
+**Next:** Phase 10 (database monitoring APIs over `database_operations`).

@@ -64,7 +64,7 @@ $e.endpoints | Select-Object method, route, requests,
 $r = Invoke-Api GET "$base/runtime?from=$from" -Token $token
 if ($r.available) {
     $last = $r.points | Where-Object { $null -ne $_.heapUsedBytes -or $null -ne $_.cpuUtilization } | Select-Object -Last 1
-    Write-Host ("JVM (latest)  CPU {0}   heap {1:N0} MB used   threads {2}" -f `
+    Write-Host ("JVM (latest)  CPU {0}   heap {1:N0} MB used   threads {2:N0}" -f `
             (Format-Pct $last.cpuUtilization), ($last.heapUsedBytes / 1MB), $last.threads)
 } else {
     Write-Host "No JVM runtime metrics received in this window."
