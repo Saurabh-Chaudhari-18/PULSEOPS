@@ -18,7 +18,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 7 | OpenTelemetry OTLP Ingestion | COMPLETED |
 | 8 | Java Sample Application Integration | COMPLETED |
 | 9 | Application and API Monitoring | COMPLETED |
-| 10 | Database Monitoring | IMPLEMENTED — awaiting PC run |
+| 10 | Database Monitoring | COMPLETED |
 | 11 | Logs and Distributed Traces | NOT STARTED |
 | 12 | Python ML Service and Anomaly Detection | NOT STARTED |
 | 13 | Incident Correlation | NOT STARTED |
@@ -193,7 +193,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - JVM CPU, heap and thread counts reported from agent metrics.
 - Observed limitation: when nearly all requests sit just above a bucket bound (e.g. 1.5 s), p50/p95/p99 can coincide at the observed maximum — expected histogram resolution (ADR-014).
 
-## Phase 10 — Database Monitoring — IMPLEMENTED, awaiting PC run (2026-11-23)
+## Phase 10 — Database Monitoring — COMPLETED (2026-11-23)
 
 **Completed (code):** `DatabaseMonitoringService` + `DatabaseMonitoringController` (ADR-021): database summary with breakdown by system × operation type and health; query-shape table with share of database time, slow-call counts, exact percentiles, last seen and the slowest call's trace ID; per-statement or overall time series; individual slow/failed calls with trace and span IDs; connection-pool gauges (used/idle/max/pending/peak) under both metric naming conventions; database totals in the organization overview. `HealthRules` generalised to per-signal thresholds (HTTP and database). `scripts/dev-monitoring.ps1` now shows the database section.
 
@@ -202,4 +202,8 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - ✅ `HealthRulesTest` extended (24 checks incl. database thresholds) compiled and executed.
 - ✅ Offline javac checks over 199 files.
 
-**Pending on the PC:** `DatabaseMonitoringServiceTest`, the extended OTLP journey (database summary, `slowMs`, operations with share/trace link, calls, series, pool unavailable, invalid sort, overview database totals), and live acceptance with the sample's `slow-db` fault.
+**Tests executed on the developer PC (2026-11-23):** **237/237 passed** (10.9 s), including `DatabaseMonitoringServiceTest` and the extended OTLP journey (database summary, `slowMs`, operations with share and trace link, calls, series, pool unavailable, invalid sort → 400, overview database totals).
+
+**Acceptance on live data (sample + Java agent, `slow-db` fault, last 5 minutes):** database health CRITICAL ("p95 latency 1514 ms"), 623 calls, 168 slow; `SELECT PULSE_SLEEP(?)` first with 99.9 % of database time (avg 1509 ms) while the Hibernate order queries stayed at 0–1 ms; statements shown with literals removed; HikariCP pool gauges received from the agent (used ≈ 1.25, idle ≈ 8.75, max 10, waiting 0); the HTTP view simultaneously showed the two affected endpoints (`/api/orders/{id}`, `/api/orders/report`) at ~1.5 s.
+
+**Next:** Phase 11 (logs and distributed traces).
