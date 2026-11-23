@@ -46,7 +46,25 @@ public record PulseOpsProperties(
             @DefaultValue("no-reply@pulseops.local") String from) {
     }
 
-    public record Ml(@DefaultValue("http://localhost:8500") String baseUrl, String sharedSecret) {
+    /**
+     * ML service and the anomaly detection job (ADR-023/024).
+     *
+     * @param detectionEnabled  run the background detection job
+     * @param detectionInterval time between runs
+     * @param historyMinutes    baseline + evaluation window sent per series
+     * @param evaluationMinutes newest minutes compared with the baseline
+     * @param sensitivity       low | medium | high
+     * @param resolveAfter      an active anomaly not seen again for this long is resolved
+     */
+    public record Ml(
+            @DefaultValue("http://localhost:8500") String baseUrl,
+            String sharedSecret,
+            @DefaultValue("true") boolean detectionEnabled,
+            @DefaultValue("60s") Duration detectionInterval,
+            @DefaultValue("180") int historyMinutes,
+            @DefaultValue("5") int evaluationMinutes,
+            @DefaultValue("medium") String sensitivity,
+            @DefaultValue("10m") Duration resolveAfter) {
     }
 
     /**

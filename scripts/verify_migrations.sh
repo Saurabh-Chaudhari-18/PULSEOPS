@@ -214,6 +214,70 @@ DO $$ BEGIN
 END $$;
 COMMIT;
 
+-- V12: discovery policy reveals connections across tenants only with app.discovery='on',
+-- read-only; one active anomaly per (service, metric, scope) with upsert merging.
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000a';
+INSERT INTO integration_connections (organization_id, service_id, integration_type, status, last_telemetry_at)
+ VALUES ('20000000-0000-0000-0000-00000000000a','40000000-0000-0000-0000-00000000000a','otlp','connected',now());
+COMMIT;
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000b';
+INSERT INTO integration_connections (organization_id, service_id, integration_type, status, last_telemetry_at)
+ VALUES ('20000000-0000-0000-0000-00000000000b','40000000-0000-0000-0000-00000000000b','otlp','connected',now());
+COMMIT;
+BEGIN;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM integration_connections) <> 0 THEN RAISE EXCEPTION 'connections visible without context'; END IF;
+END $$;
+SELECT set_config('app.discovery', 'on', true);
+DO $$ BEGIN
+  IF (SELECT count(*) FROM integration_connections) <> 2 THEN RAISE EXCEPTION 'discovery should see both tenants'; END IF;
+  BEGIN
+    UPDATE integration_connections SET status = 'disabled';
+    IF FOUND THEN RAISE EXCEPTION 'discovery must not allow writes'; END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+COMMIT;
+BEGIN;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM integration_connections) <> 0 THEN RAISE EXCEPTION 'discovery setting leaked past commit'; END IF;
+END $$;
+COMMIT;
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000a';
+INSERT INTO anomalies (organization_id, project_id, service_id, metric, scope, anomaly_type, severity, observed_value,
+                       expected_value, score, window_start, window_end, last_seen_at)
+ VALUES ('20000000-0000-0000-0000-00000000000a','30000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-00000000000a',
+         'response_latency','service','spike','medium',300,12,40,now()-interval '5 min',now(),now());
+INSERT INTO anomalies (organization_id, project_id, service_id, metric, scope, anomaly_type, severity, observed_value,
+                       expected_value, score, window_start, window_end, last_seen_at)
+ VALUES ('20000000-0000-0000-0000-00000000000a','30000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-00000000000a',
+         'response_latency','service','spike','critical',1500,12,95,now()-interval '4 min',now()+interval '1 min',now())
+ ON CONFLICT (service_id, metric, scope) WHERE status IN ('open', 'linked') DO UPDATE SET
+   severity = CASE WHEN array_position(ARRAY['low','medium','high','critical'], EXCLUDED.severity)
+                      > array_position(ARRAY['low','medium','high','critical'], anomalies.severity)
+                   THEN EXCLUDED.severity ELSE anomalies.severity END,
+   observed_value = EXCLUDED.observed_value, score = GREATEST(anomalies.score, EXCLUDED.score),
+   window_end = GREATEST(anomalies.window_end, EXCLUDED.window_end),
+   last_seen_at = EXCLUDED.last_seen_at, occurrences = anomalies.occurrences + 1;
+DO $$ BEGIN
+  IF (SELECT format('%s/%s/%s/%s', count(*), max(severity), max(occurrences), max(score)) FROM anomalies)
+     IS DISTINCT FROM '1/critical/2/95' THEN
+    RAISE EXCEPTION 'anomaly upsert wrong: %', (SELECT format('%s/%s/%s/%s', count(*), max(severity), max(occurrences), max(score)) FROM anomalies);
+  END IF;
+END $$;
+UPDATE anomalies SET status = 'resolved', resolved_at = now();
+INSERT INTO anomalies (organization_id, project_id, service_id, metric, scope, anomaly_type, severity, observed_value,
+                       score, window_start, window_end)
+ VALUES ('20000000-0000-0000-0000-00000000000a','30000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-00000000000a',
+         'response_latency','service','spike','low',200,5,now(),now());
+DO $$ BEGIN
+  IF (SELECT count(*) FROM anomalies) <> 2 THEN RAISE EXCEPTION 'a resolved anomaly must not block a new one'; END IF;
+END $$;
+COMMIT;
+
 -- Seed catalog present.
 DO $$ BEGIN
   IF (SELECT count(*) FROM permissions) < 11 THEN RAISE EXCEPTION 'permissions seed missing'; END IF;

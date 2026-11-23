@@ -18,7 +18,9 @@ import jakarta.servlet.http.Cookie;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pulseops.common.tenancy.TenantContext;
+import com.pulseops.anomaly.service.AnomalyDetectionJob;
 import com.pulseops.testsupport.OtlpTestData;
+import com.pulseops.testsupport.StubMl;
 import com.pulseops.testsupport.TestProperties;
 
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceResponse;
@@ -59,9 +61,17 @@ class FullJourneyIntegrationTest {
     ObjectMapper json;
     @Autowired
     JdbcTemplate jdbc;
+    @Autowired
+    AnomalyDetectionJob detectionJob;
+
+    /** Stand-in for the Python ML service: flags every service-level latency series. */
+    static final StubMl STUB_ML = StubMl.start();
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
+        registry.add("pulseops.ml.base-url", STUB_ML::baseUrl);
+        registry.add("pulseops.ml.shared-secret", () -> StubMl.SECRET);
+        registry.add("pulseops.ml.detection-enabled", () -> "false");
         registry.add("spring.datasource.url", () -> System.getenv("PULSEOPS_TEST_DB_URL"));
         registry.add("spring.datasource.username",
                 () -> System.getenv().getOrDefault("PULSEOPS_TEST_DB_USER", "pulseops_app"));
@@ -364,10 +374,39 @@ class FullJourneyIntegrationTest {
         call(carol, get(orgApi + "/traces/" + "0".repeat(31) + "1"), null, 404);
         call(carol, get(orgApi + "/logs?cursor=garbage"), null, 400);
 
+        // 9. Anomaly detection (Phase 12): discovery across tenants, series to the ML service,
+        //    findings stored under the tenant, merged on repeat, dismissed by a user.
+        AnomalyDetectionJob.Status run = detectionJob.runOnce(Instant.now().plusSeconds(120));
+        assertThat(run.lastError()).isNull();
+        assertThat(STUB_ML.lastSecret()).isEqualTo(StubMl.SECRET);
+        assertThat(STUB_ML.seriesKeys()).contains(serviceId + "|response_latency|service",
+                serviceId + "|error_rate|GET /orders/{id}", serviceId + "|db_duration|service");
+        JsonNode anomaliesPage = body(call(carol, get(orgApi + "/anomalies?serviceId=" + serviceId), null, 200));
+        assertThat(anomaliesPage.get("anomalies")).hasSize(1);
+        JsonNode anomaly = anomaliesPage.get("anomalies").get(0);
+        assertThat(anomaly.get("metric").asText()).isEqualTo("response_latency");
+        assertThat(anomaly.get("scope").asText()).isEqualTo("service");
+        assertThat(anomaly.get("severity").asText()).isEqualTo("high");
+        assertThat(anomaly.get("reason").asText()).startsWith("p95 latency");
+        assertThat(anomaly.get("evidence").get("detector").asText()).isEqualTo("stub");
+        detectionJob.runOnce(Instant.now().plusSeconds(120));
+        JsonNode merged = body(call(carol, get(orgApi + "/anomalies/" + anomaly.get("id").asText()), null, 200));
+        assertThat(merged.get("occurrences").asInt()).as("repeat finding merges").isEqualTo(2);
+        JsonNode dismissed = body(call(carol, post(orgApi + "/anomalies/" + anomaly.get("id").asText() + "/dismiss"),
+                null, 200));
+        assertThat(dismissed.get("status").asText()).isEqualTo("dismissed");
+        call(carol, post(orgApi + "/anomalies/" + anomaly.get("id").asText() + "/dismiss"), null, 409);
+        assertThat(body(call(carol, get(orgApi + "/anomalies"), null, 200)).get("anomalies")).isEmpty();
+        assertThat(body(call(carol, get(orgApi + "/anomalies?status=dismissed"), null, 200)).get("anomalies"))
+                .hasSize(1);
+        assertThat(body(call(carol, get(orgApi + "/anomalies/detection-status"), null, 200)).get("lastSuccessAt")
+                .isNull()).isFalse();
+
         call(carol, get(monitoring + "/summary?from=not-a-time"), null, 400);
         Session mallory = registerAndLogin("mallory-" + suffix + "@it.test");
         call(mallory, get(monitoring + "/summary"), null, 404);
         call(mallory, get("/api/v1/organizations/" + orgId + "/traces/" + OtlpTestData.TRACE_ID), null, 404);
+        call(mallory, get("/api/v1/organizations/" + orgId + "/anomalies"), null, 404);
     }
 
     @Test

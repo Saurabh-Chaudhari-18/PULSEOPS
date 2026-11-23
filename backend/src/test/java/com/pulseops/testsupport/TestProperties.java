@@ -22,7 +22,8 @@ public final class TestProperties {
                         List.of("https://app.pulseops.test")),
                 new PulseOpsProperties.Auth(required, Duration.ofHours(24), Duration.ofMinutes(30)),
                 new PulseOpsProperties.Mail(true, "no-reply@pulseops.test"),
-                new PulseOpsProperties.Ml("http://localhost:8500", null),
+                new PulseOpsProperties.Ml("http://localhost:8500", null, false, Duration.ofSeconds(60), 180, 5,
+                        "medium", Duration.ofMinutes(10)),
                 new PulseOpsProperties.Ingest("https://ingest.pulseops.test", 1_048_576, 500, 200, 2, 600));
     }
 

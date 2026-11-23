@@ -227,3 +227,19 @@ Under `/api/v1/organizations/{orgId}`; same `from`/`to` rules (default last hour
 | `GET /traces/{traceId}` | All spans (≤ 2000) as a depth-first tree — `depth`, `offsetMs` from trace start, duration, status, attributes, `orphan` when the parent span was not received — plus the trace's logs (≤ 500), services, totals, `complete`, `truncated` |
 
 Errors: 400 `INVALID_TIME_RANGE`, `INVALID_LEVEL`, `INVALID_TRACE_ID`, `INVALID_CURSOR`, `INVALID_SORT`, `INVALID_DURATION`, `QUERY_TOO_LONG`; 404 `TRACE_NOT_FOUND` (also for another organization's trace ID).
+
+## Anomalies (JWT)
+
+Under `/api/v1/organizations/{orgId}/anomalies`. Produced every minute by the detection job (ADR-024) from the ML service's findings (ADR-023); one **active** anomaly per service × metric × scope (`service` or an endpoint like `GET /api/orders/{id}`), merged while it persists and **resolved** automatically after 10 minutes without recurrence.
+
+| Endpoint | Permission | Returns |
+|---|---|---|
+| `GET ?from&to&status&serviceId&minSeverity&cursor&limit` | `telemetry.read` | Anomalies that were active in the window, newest detection first, keyset-paginated. `status` = `active` (open + linked, default), `open`, `linked`, `resolved`, `dismissed`, `all`; `minSeverity` = low…critical. Each: metric (`request_rate`, `response_latency`, `error_rate`, `db_duration`, `connection_utilization`), scope, type (`spike`/`drop`), severity, observed vs expected, score (robust z), human-readable `reason`, detected/last-seen times, window, occurrences, status, evidence (detector, spread, baseline size, sensitivity) |
+| `GET /{id}` | `telemetry.read` | One anomaly |
+| `POST /{id}/dismiss` | `incident.manage` | Marks an active anomaly as a false positive (audited `anomaly.dismissed`); 409 `ANOMALY_NOT_ACTIVE` otherwise |
+| `GET /detection-status` | `telemetry.read` | Job health (no tenant data): enabled, last run/success, last error (e.g. ML service unavailable), services/series evaluated, findings |
+
+## ML service (internal)
+
+`POST {PULSEOPS_ML_URL}/v1/detect` with header `X-PulseOps-ML-Secret` — see `ml-service/README.md`. Not exposed to customers.
+

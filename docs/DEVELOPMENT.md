@@ -158,3 +158,8 @@ Modern browsers and recent curl versions treat `http://localhost` as a secure co
 database, creating a demo service and key (`scripts/dev-bootstrap.ps1`), and running the
 sample service with the OpenTelemetry Java agent so PulseOps receives real traces, logs
 and metrics.
+
+## Running the ML service and anomaly detection
+
+See `ml-service/README.md`. In short: create a virtual environment in `ml-service`, `pip install -r requirements-dev.txt`, run `python -m pytest`, then start it with `uvicorn --factory app.main:create_app --host 127.0.0.1 --port 8500` and the same `PULSEOPS_ML_SECRET` (≥ 32 characters) as the backend. The backend's job calls `PULSEOPS_ML_URL` (default `http://localhost:8500`) every minute; `scripts/dev-anomalies.ps1` shows its status and the anomalies found.
+

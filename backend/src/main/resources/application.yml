@@ -50,6 +50,9 @@ pulseops:
   ml:
     base-url: ${PULSEOPS_ML_URL:http://localhost:8500}
     shared-secret: ${PULSEOPS_ML_SECRET:}
+    detection-enabled: ${PULSEOPS_ANOMALY_DETECTION:true}
+    detection-interval: ${PULSEOPS_ANOMALY_INTERVAL:60s}
+    sensitivity: ${PULSEOPS_ANOMALY_SENSITIVITY:medium}
   ingest:
     public-base-url: ${PULSEOPS_INGEST_PUBLIC_URL:http://localhost:8080}
     max-payload-bytes: ${PULSEOPS_INGEST_MAX_BYTES:1048576}

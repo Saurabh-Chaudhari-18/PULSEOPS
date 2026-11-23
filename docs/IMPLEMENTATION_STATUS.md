@@ -20,7 +20,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 9 | Application and API Monitoring | COMPLETED |
 | 10 | Database Monitoring | COMPLETED |
 | 11 | Logs and Distributed Traces | COMPLETED |
-| 12 | Python ML Service and Anomaly Detection | NOT STARTED |
+| 12 | Python ML Service and Anomaly Detection | IMPLEMENTED — awaiting PC run |
 | 13 | Incident Correlation | NOT STARTED |
 | 14 | Root Cause Analysis and Recommendations | NOT STARTED |
 | 15 | Alerts and Notifications | NOT STARTED |
@@ -227,4 +227,18 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - A first run during heavy machine load (tests + backend restart on the 8 GB PC) showed ~39 s client spans and traces missing middle spans: the sample JVM was stalled and the agent dropped exports while PulseOps restarted. The explorer displayed it faithfully (orphan roots); a re-run once the machine was idle was normal.
 - Follow-up done: trace summaries gained `entryName` (first SERVER span) because the sample's self-generated traffic makes HTTP-client spans (named only `POST`/`GET`) the roots; `name` search matches either. Verified on PostgreSQL.
 
-**Next:** Phase 12 (Python ML service: anomaly detection on the stored metrics).
+## Phase 12 — Python ML Service and Anomaly Detection — IMPLEMENTED, awaiting PC run (2026-11-23)
+
+**Completed (code):**
+- `ml-service` (FastAPI, numpy, pydantic; ADR-023): robust median/MAD detection with per-metric practical-significance guards, severities and explanations; `POST /v1/detect` (shared secret, constant-time compare, 4 MiB body limit, ≤ 200 series × 1440 points, strict validation, docs endpoints disabled); refuses to start without a ≥ 32-character secret unless explicitly in insecure dev mode; Dockerfile (non-root); README with rules.
+- Backend `anomaly` module (ADR-024): `AnomalyDetectionJob` (minute schedule; cross-tenant discovery via the V12 SELECT-only `app.discovery` policy; per-tenant series building for service + top-10 endpoints, database p95 and pool utilisation; upsert/merge; auto-resolve after 10 min), `MlClient`, `SeriesBuilder`, `AnomalyService` + `AnomalyController` (list with filters and cursors, detail, dismiss with audit, detection status).
+- Migration **V12**: discovery policy; anomalies gain scope, reason, occurrences, last_seen_at, resolved_at, status `resolved`; one active anomaly per service × metric × scope.
+- `scripts/dev-anomalies.ps1`.
+
+**Tests executed (cloud):**
+- ✅ Python: 19 tests — detection (latency/DB spikes with severity and reason, noise and small absolute changes ignored, single bad minute ignored, sparse minutes ignored, insufficient history reported, error rate from a zero baseline and its minimum failed-request count, traffic drop with missing minutes, low-traffic drops ignored, traffic spike, sensitivity levels, flat-baseline spread floor, non-finite values), request validation/limits, and the backend JSON contract. The FastAPI HTTP tests are skipped here (FastAPI not installable in the cloud sandbox).
+- ✅ `verify_migrations.sh` with V12 assertions: discovery sees both tenants only with the setting, cannot write, and the setting does not survive the transaction; anomaly upsert keeps the worse severity/higher score and counts occurrences; a resolved anomaly does not block a new one.
+- ✅ All 11 anomaly queries prepared and executed on PostgreSQL 16 (discovery, per-minute service/endpoint/database/pool series, upsert insert vs merge, severity filter, stale resolution, dismiss).
+- ✅ Offline javac checks over 216 files.
+
+**Pending on the PC:** `pytest` in `ml-service` (incl. HTTP layer), `AnomalyUnitTest`, the extended OTLP journey (job → stub ML service with the same JSON contract → anomaly stored, merged on repeat, dismissed, 409 on second dismiss, status filters, detection status, non-member 404), and live acceptance with the real ML service and the sample's fault presets.
