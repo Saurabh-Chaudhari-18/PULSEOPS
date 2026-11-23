@@ -41,7 +41,7 @@ final class ExploreSql {
     /**
      * Trace summaries: traces with at least one span in the window (and service), aggregated
      * over all their spans. org, from, to, service ×2, org, minDuration ×2, errorsOnly,
-     * pattern ×2, cursorTime ×2, cursorId, sortSlowest, limit.
+     * pattern ×3, cursorTime ×2, cursorId, sortSlowest, limit.
      */
     static final String TRACES = """
             WITH matched AS (
@@ -59,20 +59,22 @@ final class ExploreSql {
                        (array_agg(t.name ORDER BY (t.parent_span_id IS NULL) DESC, t.start_time))[1] AS root_name,
                        (array_agg(t.service_id ORDER BY (t.parent_span_id IS NULL) DESC, t.start_time))[1]
                            AS root_service_id,
+                       (array_agg(t.name ORDER BY t.start_time) FILTER (WHERE t.kind = 'SERVER'))[1] AS entry_name,
                        bool_or(t.parent_span_id IS NULL) AS has_root
                 FROM distributed_traces t
                 JOIN matched m ON m.trace_id = t.trace_id
                 WHERE t.organization_id = ?
                 GROUP BY t.trace_id
             )
-            SELECT a.trace_id, a.start_time, a.spans, a.errors, a.services, a.root_name, a.root_service_id,
+            SELECT a.trace_id, a.start_time, a.spans, a.errors, a.services, a.root_name,
+                   coalesce(a.entry_name, a.root_name) AS entry_name, a.root_service_id,
                    s.name AS root_service_name, a.has_root,
                    extract(epoch FROM (a.end_time - a.start_time)) * 1000 AS duration_ms
             FROM agg a
             LEFT JOIN services s ON s.id = a.root_service_id
             WHERE (?::double precision IS NULL OR extract(epoch FROM (a.end_time - a.start_time)) * 1000 >= ?)
               AND (NOT ? OR a.errors > 0)
-              AND (?::text IS NULL OR a.root_name ILIKE ? ESCAPE '\\')
+              AND (?::text IS NULL OR a.root_name ILIKE ? ESCAPE '\\' OR a.entry_name ILIKE ? ESCAPE '\\')
               AND (?::timestamptz IS NULL OR (a.start_time, a.trace_id) < (?, ?))
             ORDER BY CASE WHEN ? THEN a.end_time - a.start_time END DESC NULLS LAST,
                      a.start_time DESC, a.trace_id DESC

@@ -19,7 +19,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 8 | Java Sample Application Integration | COMPLETED |
 | 9 | Application and API Monitoring | COMPLETED |
 | 10 | Database Monitoring | COMPLETED |
-| 11 | Logs and Distributed Traces | IMPLEMENTED — awaiting PC run |
+| 11 | Logs and Distributed Traces | COMPLETED |
 | 12 | Python ML Service and Anomaly Detection | NOT STARTED |
 | 13 | Incident Correlation | NOT STARTED |
 | 14 | Root Cause Analysis and Recommendations | NOT STARTED |
@@ -206,7 +206,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Acceptance on live data (sample + Java agent, `slow-db` fault, last 5 minutes):** database health CRITICAL ("p95 latency 1514 ms"), 623 calls, 168 slow; `SELECT PULSE_SLEEP(?)` first with 99.9 % of database time (avg 1509 ms) while the Hibernate order queries stayed at 0–1 ms; statements shown with literals removed; HikariCP pool gauges received from the agent (used ≈ 1.25, idle ≈ 8.75, max 10, waiting 0); the HTTP view simultaneously showed the two affected endpoints (`/api/orders/{id}`, `/api/orders/report`) at ~1.5 s.
 
-## Phase 11 — Logs and Distributed Traces — IMPLEMENTED, awaiting PC run (2026-11-23)
+## Phase 11 — Logs and Distributed Traces — COMPLETED (2026-11-23)
 
 **Completed (code):** `explore` module (ADR-022).
 - `LogExplorerService`: search by time, service, minimum or exact levels, message text and trace ID, newest first with keyset cursors; per-level volume histogram.
@@ -219,4 +219,12 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - ✅ `CursorAndTreeTest` (9 checks: micro-second cursor round trip, tampered cursors, depth-first order, orphans, cycles) compiled and executed.
 - ✅ Offline javac checks over 209 files.
 
-**Pending on the PC:** `ExplorerServicesTest` and the extended OTLP journey (trace list and filters, trace tree with offsets and logs, log search with level + text, cursor paging, histogram, 400s for bad trace ID/cursor, 404 for unknown and foreign traces), plus a live look with `dev-explore.ps1`.
+**Tests executed on the developer PC (2026-11-23):** **244/244 passed**, including `ExplorerServicesTest` and the extended OTLP journey (trace list and filters, trace tree with offsets and logs, log search with level + text, cursor paging, histogram, 400s for bad trace ID/cursor, 404 for unknown and foreign traces).
+
+**Acceptance on live data (`scripts/dev-explore.ps1`):**
+- `errors` fault: each failed order produced four ERROR logs (inventory lookup failed → exception → servlet error → "Could not place order"), all carrying the same trace ID.
+- Normal traffic, last 3 minutes: full trees, e.g. 8 spans / 268 ms — traffic CLIENT `POST` → SERVER `POST /api/orders` → CLIENT `GET` → SERVER `GET /internal/inventory/{sku}`, then `OrderRepository.save` → `Session.persist` → CLIENT `INSERT orders.orders` → `Transaction.commit`, with the trace's INFO log attached; WARN "Payment declined" logs linked to their traces.
+- A first run during heavy machine load (tests + backend restart on the 8 GB PC) showed ~39 s client spans and traces missing middle spans: the sample JVM was stalled and the agent dropped exports while PulseOps restarted. The explorer displayed it faithfully (orphan roots); a re-run once the machine was idle was normal.
+- Follow-up done: trace summaries gained `entryName` (first SERVER span) because the sample's self-generated traffic makes HTTP-client spans (named only `POST`/`GET`) the roots; `name` search matches either. Verified on PostgreSQL.
+
+**Next:** Phase 12 (Python ML service: anomaly detection on the stored metrics).

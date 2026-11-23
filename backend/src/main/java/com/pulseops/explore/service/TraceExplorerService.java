@@ -73,12 +73,12 @@ public class TraceExplorerService {
         Timestamp cursorTime = cursor == null ? null : Timestamp.from(cursor.time());
         Object[] args = {access.organizationId(), Timestamp.from(window.from()), Timestamp.from(window.to()),
                 filter.serviceId(), filter.serviceId(), access.organizationId(), minDuration, minDuration,
-                filter.errorsOnly(), pattern, pattern, cursorTime, cursorTime, cursor == null ? null : cursor.id(),
+                filter.errorsOnly(), pattern, pattern, pattern, cursorTime, cursorTime, cursor == null ? null : cursor.id(),
                 slowest, size + 1};
         List<TraceSummary> rows = jdbc.query(ExploreSql.TRACES, (rs, n) -> new TraceSummary(
                 rs.getString("trace_id"), rs.getTimestamp("start_time").toInstant(),
                 round(rs.getDouble("duration_ms")), rs.getLong("spans"), rs.getLong("errors"), rs.getLong("services"),
-                rs.getString("root_name"), rs.getObject("root_service_id", UUID.class),
+                rs.getString("root_name"), rs.getString("entry_name"), rs.getObject("root_service_id", UUID.class),
                 rs.getString("root_service_name"), rs.getBoolean("has_root")), args);
         String next = null;
         if (rows.size() > size) {

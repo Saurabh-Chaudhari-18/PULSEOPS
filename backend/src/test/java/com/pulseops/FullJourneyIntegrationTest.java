@@ -333,6 +333,7 @@ class FullJourneyIntegrationTest {
         JsonNode traceSummary = tracePage.get("traces").get(0);
         assertThat(traceSummary.get("traceId").asText()).isEqualTo(OtlpTestData.TRACE_ID);
         assertThat(traceSummary.get("rootName").asText()).isEqualTo("GET /orders/{id}");
+        assertThat(traceSummary.get("entryName").asText()).as("first SERVER span").isEqualTo("GET /orders/{id}");
         assertThat(traceSummary.get("spans").asLong()).isEqualTo(2);
         assertThat(traceSummary.get("errorSpans").asLong()).isEqualTo(1);
         assertThat(body(call(carol, get(orgApi + "/traces?minDurationMs=500"), null, 200)).get("traces")).isEmpty();

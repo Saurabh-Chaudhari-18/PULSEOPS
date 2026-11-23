@@ -50,7 +50,7 @@ $logs.logs | Select-Object @{ n = "time"; e = { ([DateTime]$_.occurredAt).ToLoca
 if (-not $TraceId) {
     Write-Host "Slowest traces (last $Minutes minutes)" -ForegroundColor Cyan
     $traces = Invoke-Api GET "$api/traces?from=$from&sort=slowest&limit=8" -Token $token
-    $traces.traces | Select-Object traceId, rootName, rootServiceName,
+    $traces.traces | Select-Object traceId, @{ n = "entry"; e = { $_.entryName } }, rootServiceName,
             @{ n = "duration"; e = { "{0:N0} ms" -f $_.durationMs } }, spans, errorSpans | Format-Table -AutoSize
     if ($traces.traces.Count -eq 0) { return }
     $TraceId = $traces.traces[0].traceId

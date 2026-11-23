@@ -31,10 +31,12 @@ public final class ExploreViews {
     /**
      * One trace. {@code rootName}/{@code rootService} come from the span without a parent,
      * or the earliest span when the root was not received ({@code complete = false}).
+     * {@code entryName} is the first SERVER span (e.g. {@code POST /api/orders}) — more telling
+     * than an HTTP client root named only by its method — falling back to the root name.
      */
     public record TraceSummary(String traceId, Instant startTime, double durationMs, long spans, long errorSpans,
-                               long services, String rootName, UUID rootServiceId, String rootServiceName,
-                               boolean complete) {
+                               long services, String rootName, String entryName, UUID rootServiceId,
+                               String rootServiceName, boolean complete) {
     }
 
     public record TracePage(Window window, String sort, List<TraceSummary> traces, String nextCursor) {
