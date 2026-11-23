@@ -89,10 +89,12 @@ Write-Host ""
 Write-Host "Integration key (shown once - store it securely):" -ForegroundColor Green
 Write-Host "  $($credential.key)"
 Write-Host ""
+$baseArg = if ($BaseUrl -ne "http://localhost:8080") { " -BaseUrl $BaseUrl" } else { "" }
+$otlpArg = if ($BaseUrl -ne "http://localhost:8080") { " -OtlpEndpoint $BaseUrl/otlp" } else { "" }
 Write-Host "Next, in this PowerShell window:"
 Write-Host "  `$env:PULSEOPS_INGEST_KEY = '$($credential.key)'"
-Write-Host "  ./examples/order-service/run-with-agent.ps1"
+Write-Host "  ./examples/order-service/run-with-agent.ps1$otlpArg"
 Write-Host ""
 Write-Host "Check the connection with:"
-Write-Host "  ./scripts/dev-status.ps1"
+Write-Host "  ./scripts/dev-status.ps1$baseArg"
 Write-Host "(organization $($org.id), service $($service.id))"

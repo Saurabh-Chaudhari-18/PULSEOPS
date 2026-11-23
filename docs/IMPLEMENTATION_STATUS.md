@@ -16,7 +16,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 5 | API Credentials and Integration Onboarding | COMPLETED |
 | 6 | REST Telemetry Ingestion | COMPLETED |
 | 7 | OpenTelemetry OTLP Ingestion | COMPLETED |
-| 8 | Java Sample Application Integration | IMPLEMENTED — awaiting PC run |
+| 8 | Java Sample Application Integration | COMPLETED |
 | 9 | Application and API Monitoring | NOT STARTED |
 | 10 | Database Monitoring | NOT STARTED |
 | 11 | Logs and Distributed Traces | NOT STARTED |
@@ -157,7 +157,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Tests executed on the developer PC (2026-11-21, JDK 25, IntelliJ "All in pulseops-backend", **223/223 tests passed**, 9.3 s):** compiles against `opentelemetry-proto` 1.5.0-alpha / `protobuf-java` 4.28.3; Flyway applied V11 to the existing V10 database; `OtlpDecoderTest`, `OtlpIngestServiceTest`, the updated `TelemetryProcessorTest`, and the end-to-end `FullJourneyIntegrationTest.openTelemetryJavaAgentExportsBecomeTracesLogsDbCallsAndMetrics` (gzip trace export with partial rejection, logs, metrics, protobuf error bodies, CONNECTED, span dedupe, redaction, stored rows checked under RLS) all pass alongside every earlier test. The `db down` stack trace in the log is the expected output of `storageFailureIsCountedAndDoesNotMarkConnected`.
 
-## Phase 8 — Java Sample Application Integration — IMPLEMENTED, awaiting PC run (2026-11-21)
+## Phase 8 — Java Sample Application Integration — COMPLETED (2026-11-23)
 
 **Completed (code):** `examples/order-service` — Spring Boot 3.5.6 order service with no observability code: order reads/lists/creation (JPA on H2), an inventory API called over real HTTP (CLIENT→SERVER trace hop), a simulated payment provider (402 + WARN log above a limit), unknown SKUs (422), validation errors (400), a sales report query, a built-in asynchronous traffic generator (~2 req/s), and runtime fault injection (`/admin/chaos`: `latency`, `errors`, `slow-db` via an H2 sleeping function so the delay is on the JDBC span, `outage`). Loopback-only by default because the chaos endpoint is unauthenticated.
 - `run-with-agent.ps1` / `.sh`: download a pinned OpenTelemetry Java agent (2.32.0) on first use and start the app with the standard `OTEL_*` settings from the PulseOps installation guide (http/protobuf, gzip, `x-pulseops-key`).
@@ -166,6 +166,8 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Tests executed (cloud):** offline javac checks over the sample's 18 files (no errors beyond absent libraries); `dev-bootstrap.sh` run against a mock of the PulseOps API (first run creates, second run reuses, wrong password fails cleanly with exit 1).
 
-**Pending on the PC:** `OrderServiceApplicationTest` (runs during Maven `package`: reads, 404, order through inventory + payment, 402/422/400, inventory fault → 503, slow-db fault slows the query, chaos presets); the PowerShell scripts (not runnable here); and the acceptance run: agent attached → service CONNECTED → spans, API metrics, DB operations, logs and metric points stored for `order-service`.
+**Acceptance run on the developer PC (2026-11-23, JDK 25, Windows):** backend on a fresh `pulseops_dev` database (Flyway V1–V11); `dev-bootstrap.ps1` created account → organization → project → service → JAVA_AGENT integration → service-scoped key; sample built with Maven `package` (its tests run in that step); started with OpenTelemetry Java agent 2.32.0 via `run-with-agent.ps1`. Result: integration status **CONNECTED**, `receivingNow=true`, and `api_metrics` populated from agent spans for all four routes (`/api/orders/{id}` 147, `/api/orders` 144, `/internal/inventory/{sku}` 88, `/api/orders/report` 25 requests in the first minutes; 0 server errors with faults off — 404/402/422 are client errors by design). The agent's parametrized `http.route` was used, so no high-cardinality paths.
+
+**Notes from the run:** ports 8080 (Apache httpd) and 8090 (another desktop app) were taken on the PC, so the backend ran on `PULSEOPS_PORT=18080`; `dev-bootstrap.ps1` now prints `-BaseUrl/-OtlpEndpoint` hints for non-default ports. While the backend was down the agent logged connection-refused export failures and dropped that data (expected exporter behaviour).
 
 **Next:** Phase 9 (application and API monitoring query APIs) or Phase 12 (Python anomaly detection — fully testable here).
