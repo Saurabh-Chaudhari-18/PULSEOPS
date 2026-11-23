@@ -21,6 +21,7 @@ import com.pulseops.appservice.service.ServiceView;
 import com.pulseops.common.error.ApiException;
 import com.pulseops.common.persistence.LikePatterns;
 import com.pulseops.common.tenancy.OrgAccess;
+import com.pulseops.monitoring.service.MonitoringViews.DatabaseTotals;
 import com.pulseops.monitoring.service.MonitoringViews.EndpointList;
 import com.pulseops.monitoring.service.MonitoringViews.EndpointView;
 import com.pulseops.monitoring.service.MonitoringViews.Health;
@@ -206,8 +207,14 @@ public class ApiMonitoringService {
                 .filter(v -> v.health().status() == Health.CRITICAL || v.health().status() == Health.WARNING
                         || "ERROR".equals(v.connectionStatus()))
                 .toList();
+        DbStats db = jdbc.queryForObject(MonitoringSql.DB_ORGANIZATION_STATS, (rs, n) -> DbStats.read(rs),
+                DatabaseMonitoringService.DEFAULT_SLOW_MS, access.organizationId(), ts(window.from()),
+                ts(window.to()), projectId, projectId);
+        DatabaseTotals database = new DatabaseTotals(db.calls(), db.errors(), db.errorRate(), db.slowCalls(),
+                db.p95Ms(), HealthRules.assess(HealthRules.DATABASE, db.calls(), db.errors(), db.p95Ms()));
         return new OrganizationOverview(Window.of(window), rows.size(), connected, total.requests(),
-                rate(total.requests(), window), total.errorRate(), total.p95Ms(), byHealth, attention, all);
+                rate(total.requests(), window), total.errorRate(), total.p95Ms(), byHealth, database, attention,
+                all);
     }
 
     static int severity(Health health) {

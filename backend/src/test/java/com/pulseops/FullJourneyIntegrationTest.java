@@ -294,6 +294,38 @@ class FullJourneyIntegrationTest {
         assertThat(overview.get("connectedServices").asInt()).isEqualTo(1);
         assertThat(overview.get("requests").asLong()).isEqualTo(2);
 
+        assertThat(overview.get("database").get("calls").asLong()).isEqualTo(2);
+
+        // 7. Database monitoring (Phase 10): exact percentiles over the derived DB calls.
+        JsonNode db = body(call(carol, get(monitoring + "/database/summary"), null, 200));
+        assertThat(db.get("calls").asLong()).as("one DB span per export (original + retry)").isEqualTo(2);
+        assertThat(db.get("p95Ms").asDouble()).isEqualTo(100.0);
+        assertThat(db.get("slowCalls").asLong()).as("default threshold 500 ms").isZero();
+        assertThat(db.get("breakdown").get(0).get("dbSystem").asText()).isEqualTo("postgresql");
+        assertThat(body(call(carol, get(monitoring + "/database/summary?slowMs=50"), null, 200))
+                .get("slowCalls").asLong()).isEqualTo(2);
+
+        JsonNode ops = body(call(carol, get(monitoring + "/database/operations?sort=p95"), null, 200));
+        assertThat(ops.get("operations")).hasSize(1);
+        JsonNode op = ops.get("operations").get(0);
+        assertThat(op.get("operation").asText()).isEqualTo("SELECT * FROM orders WHERE id = ?");
+        assertThat(op.get("table").asText()).isEqualTo("orders");
+        assertThat(op.get("shareOfTime").asDouble()).isEqualTo(1.0);
+        assertThat(op.get("slowestTraceId").asText()).isEqualTo(OtlpTestData.TRACE_ID);
+
+        JsonNode calls = body(call(carol, get(monitoring + "/database/calls?minDurationMs=50"), null, 200));
+        assertThat(calls.get("calls")).hasSize(2);
+        assertThat(calls.get("calls").get(0).get("traceId").asText()).isEqualTo(OtlpTestData.TRACE_ID);
+        JsonNode dbSeries = body(call(carol, get(monitoring + "/database/timeseries"), null, 200));
+        long seriesCalls = 0;
+        for (JsonNode point : dbSeries.get("points")) {
+            seriesCalls += point.get("calls").asLong();
+        }
+        assertThat(seriesCalls).isEqualTo(2);
+        assertThat(body(call(carol, get(monitoring + "/database/pool"), null, 200)).get("available").asBoolean())
+                .as("the test export has no pool metrics").isFalse();
+        call(carol, get(monitoring + "/database/operations?sort=fastest"), null, 400);
+
         call(carol, get(monitoring + "/summary?from=not-a-time"), null, 400);
         Session mallory = registerAndLogin("mallory-" + suffix + "@it.test");
         call(mallory, get(monitoring + "/summary"), null, 404);

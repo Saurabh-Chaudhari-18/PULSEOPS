@@ -21,34 +21,55 @@ public final class HealthRules {
     public static final double P95_CRITICAL_MS = 1_000;
     public static final double P95_WARNING_MS = 500;
 
+    /** Thresholds and wording for one kind of traffic. */
+    public record Rules(String unit, String errorLabel, double errorWarning, double errorCritical,
+                        double p95WarningMs, double p95CriticalMs) {
+    }
+
+    /** HTTP requests: 5xx rate and p95 latency (the specification's alerting examples). */
+    public static final Rules HTTP = new Rules("requests", "Server error rate", ERROR_RATE_WARNING,
+            ERROR_RATE_CRITICAL, P95_WARNING_MS, P95_CRITICAL_MS);
+
+    /**
+     * Database calls: same error thresholds; a single query is expected to be much faster
+     * than a whole request, so p95 warns at 200 ms and is critical at 1000 ms.
+     */
+    public static final Rules DATABASE = new Rules("database calls", "Database error rate", 0.01, 0.05, 200,
+            1_000);
+
     private HealthRules() {
     }
 
     public static HealthAssessment assess(LatencyStats stats) {
-        if (stats.requests() == 0) {
-            return new HealthAssessment(Health.NO_DATA, List.of("No requests recorded in this time range"));
+        return assess(HTTP, stats.requests(), stats.serverErrors(), stats.p95Ms());
+    }
+
+    public static HealthAssessment assess(Rules rules, long count, long errors, Double p95) {
+        if (count == 0) {
+            return new HealthAssessment(Health.NO_DATA, List.of("No " + rules.unit() + " recorded in this time range"));
         }
-        if (stats.requests() < MIN_REQUESTS) {
+        if (count < MIN_REQUESTS) {
             return new HealthAssessment(Health.HEALTHY,
-                    List.of("Only " + stats.requests() + " requests; too few to judge error rate or latency"));
+                    List.of("Only " + count + " " + rules.unit() + "; too few to judge error rate or latency"));
         }
         Health health = Health.HEALTHY;
         List<String> reasons = new ArrayList<>();
-        double errorRate = (double) stats.serverErrors() / stats.requests();
-        if (errorRate >= ERROR_RATE_CRITICAL) {
+        double errorRate = (double) errors / count;
+        if (errorRate >= rules.errorCritical()) {
             health = Health.CRITICAL;
-            reasons.add("Server error rate " + percent(errorRate) + " is at or above " + percent(ERROR_RATE_CRITICAL));
-        } else if (errorRate >= ERROR_RATE_WARNING) {
+            reasons.add(rules.errorLabel() + " " + percent(errorRate) + " is at or above "
+                    + percent(rules.errorCritical()));
+        } else if (errorRate >= rules.errorWarning()) {
             health = Health.WARNING;
-            reasons.add("Server error rate " + percent(errorRate) + " is at or above " + percent(ERROR_RATE_WARNING));
+            reasons.add(rules.errorLabel() + " " + percent(errorRate) + " is at or above "
+                    + percent(rules.errorWarning()));
         }
-        Double p95 = stats.p95Ms();
-        if (p95 != null && p95 >= P95_CRITICAL_MS) {
+        if (p95 != null && p95 >= rules.p95CriticalMs()) {
             health = Health.CRITICAL;
-            reasons.add("p95 latency " + ms(p95) + " is at or above " + ms(P95_CRITICAL_MS));
-        } else if (p95 != null && p95 >= P95_WARNING_MS) {
+            reasons.add("p95 latency " + ms(p95) + " is at or above " + ms(rules.p95CriticalMs()));
+        } else if (p95 != null && p95 >= rules.p95WarningMs()) {
             health = health == Health.CRITICAL ? health : Health.WARNING;
-            reasons.add("p95 latency " + ms(p95) + " is at or above " + ms(P95_WARNING_MS));
+            reasons.add("p95 latency " + ms(p95) + " is at or above " + ms(rules.p95WarningMs()));
         }
         return new HealthAssessment(health, List.copyOf(reasons));
     }

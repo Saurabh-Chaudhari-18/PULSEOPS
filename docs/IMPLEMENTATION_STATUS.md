@@ -18,7 +18,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 7 | OpenTelemetry OTLP Ingestion | COMPLETED |
 | 8 | Java Sample Application Integration | COMPLETED |
 | 9 | Application and API Monitoring | COMPLETED |
-| 10 | Database Monitoring | NOT STARTED |
+| 10 | Database Monitoring | IMPLEMENTED — awaiting PC run |
 | 11 | Logs and Distributed Traces | NOT STARTED |
 | 12 | Python ML Service and Anomaly Detection | NOT STARTED |
 | 13 | Incident Correlation | NOT STARTED |
@@ -193,4 +193,13 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - JVM CPU, heap and thread counts reported from agent metrics.
 - Observed limitation: when nearly all requests sit just above a bucket bound (e.g. 1.5 s), p50/p95/p99 can coincide at the observed maximum — expected histogram resolution (ADR-014).
 
-**Next:** Phase 10 (database monitoring APIs over `database_operations`).
+## Phase 10 — Database Monitoring — IMPLEMENTED, awaiting PC run (2026-11-23)
+
+**Completed (code):** `DatabaseMonitoringService` + `DatabaseMonitoringController` (ADR-021): database summary with breakdown by system × operation type and health; query-shape table with share of database time, slow-call counts, exact percentiles, last seen and the slowest call's trace ID; per-statement or overall time series; individual slow/failed calls with trace and span IDs; connection-pool gauges (used/idle/max/pending/peak) under both metric naming conventions; database totals in the organization overview. `HealthRules` generalised to per-signal thresholds (HTTP and database). `scripts/dev-monitoring.ps1` now shows the database section.
+
+**Tests executed (cloud):**
+- ✅ All 8 database queries prepared and executed as `pulseops_app` under RLS on PostgreSQL 16 with fixture calls and pool metrics; results checked by hand (5 calls / 1 error / 2 slow; exact p95 1580 ms; query shapes ordered by total time with the slowest trace ID; 5-minute series; slow-call and errors-only listings; pool used 4 avg / 6 peak / idle 8 / max 10 from the older Hikari metric names).
+- ✅ `HealthRulesTest` extended (24 checks incl. database thresholds) compiled and executed.
+- ✅ Offline javac checks over 199 files.
+
+**Pending on the PC:** `DatabaseMonitoringServiceTest`, the extended OTLP journey (database summary, `slowMs`, operations with share/trace link, calls, series, pool unavailable, invalid sort, overview database totals), and live acceptance with the sample's `slow-db` fault.

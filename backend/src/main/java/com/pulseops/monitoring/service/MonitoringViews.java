@@ -53,10 +53,15 @@ public final class MonitoringViews {
                                   HealthAssessment health) {
     }
 
+    /** Organization-wide database call statistics (exact percentiles) and their health. */
+    public record DatabaseTotals(long calls, long errors, Double errorRate, long slowCalls, Double p95Ms,
+                                 HealthAssessment health) {
+    }
+
     public record OrganizationOverview(Window window, int services, int connectedServices, long requests,
                                        Double requestsPerSecond, Double errorRate, Double p95Ms,
-                                       Map<Health, Long> servicesByHealth, List<ServiceOverview> attention,
-                                       List<ServiceOverview> allServices) {
+                                       Map<Health, Long> servicesByHealth, DatabaseTotals database,
+                                       List<ServiceOverview> attention, List<ServiceOverview> allServices) {
     }
 
     public record RuntimePoint(Instant time, Double cpuUtilization, Double heapUsedBytes, Double heapLimitBytes,

@@ -47,4 +47,17 @@ class HealthRulesTest {
         assertThat((Object) s.errorRate()).isEqualTo(0.0);
         assertThat((Object) LatencyStats.of(0, 0, 0, 0, null, new long[0]).p95Ms()).isNull();
     }
+
+    @Test
+    void databaseCallsUseTighterLatencyThresholds() {
+        assertThat((Object) HealthRules.assess(HealthRules.DATABASE, 0, 0, null).reasons().get(0))
+                .isEqualTo("No database calls recorded in this time range");
+        assertThat((Object) HealthRules.assess(HealthRules.DATABASE, 100, 0, 150.0).status()).isEqualTo(Health.HEALTHY);
+        HealthAssessment slow = HealthRules.assess(HealthRules.DATABASE, 100, 0, 250.0);
+        assertThat((Object) slow.status()).isEqualTo(Health.WARNING);
+        assertThat((Object) slow.reasons().get(0)).isEqualTo("p95 latency 250 ms is at or above 200 ms");
+        HealthAssessment failing = HealthRules.assess(HealthRules.DATABASE, 100, 6, 10.0);
+        assertThat((Object) failing.status()).isEqualTo(Health.CRITICAL);
+        assertThat((Object) failing.reasons().get(0)).isEqualTo("Database error rate 6.0% is at or above 5.0%");
+    }
 }

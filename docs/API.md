@@ -201,4 +201,18 @@ All under `/api/v1/organizations/{orgId}`. Time range: `from`, `to` as ISO-8601 
 
 **Health** (ADR-020): `NO_DATA` (no requests), `HEALTHY` (also when fewer than 20 requests — too few to judge), `WARNING` (5xx rate ≥ 1 % or p95 ≥ 500 ms), `CRITICAL` (5xx rate ≥ 5 % or p95 ≥ 1000 ms), with human-readable `reasons`. Errors: 400 `INVALID_TIME_RANGE` / `INVALID_SORT` / `METHOD_REQUIRED` / `INVALID_METHOD`; 404 for unknown services or non-members.
 
-*Pending:* database monitoring (Phase 10), logs and traces (Phase 11).
+## Monitoring — database (JWT; permission `telemetry.read`)
+
+Under `/api/v1/organizations/{orgId}/services/{serviceId}/monitoring/database`, same `from`/`to`/`step` rules as above. Statements are the shapes stored at ingestion (literals replaced by `?`); parameter values are never collected. Durations are **exact** percentiles over individual calls. `slowMs` (1–600000, default 500) defines a slow call.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /summary?from&to&slowMs` | Calls, calls/s, errors, error rate, slow calls, total time, avg/p50/p95/p99/max, breakdown by database system × operation type (with share of time), `health` (database thresholds: WARNING at ≥ 1 % errors or p95 ≥ 200 ms, CRITICAL at ≥ 5 % or ≥ 1000 ms) |
+| `GET /operations?from&to&sort&search&limit&slowMs` | Query shapes (system, type, statement, table) with calls, errors, slow calls, total time, **share of database time**, avg/p50/p95/p99/max, `lastSeen`, `slowestTraceId`; `sort` = `total_time` (default), `calls`, `avg`, `p95`, `p99`, `max`, `errors`, `error_rate`, `slow`; `search` matches statement or table |
+| `GET /timeseries?from&to&step&operation&slowMs` | Calls, calls/s, errors, slow calls, avg/p50/p95/p99 per step, for all calls or one statement |
+| `GET /calls?from&to&minDurationMs&errorsOnly&limit` | Individual calls, slowest first, with error message and trace/span IDs (default: calls ≥ 500 ms; with `errorsOnly=true` default 0 ms) |
+| `GET /pool?from&to&step` | Connection-pool gauges summed across pools — `used`, `idle`, `max`, `pending`, `peakUsed` — when reported (stable `db.client.connection.*` or older `db.client.connections.*` names, e.g. HikariCP via the Java agent); `available=false` otherwise |
+
+The organization overview also includes `database` totals (calls, errors, error rate, slow calls, p95, health).
+
+*Pending:* logs and traces (Phase 11).

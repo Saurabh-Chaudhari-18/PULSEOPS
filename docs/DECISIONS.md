@@ -124,3 +124,9 @@ Short, dated records of decisions that shape the system. Newest last.
 
 **Why:** At the target scale (one-minute rows, a few dozen routes per service) on-the-fly aggregation over the `(service_id, bucket_start)` index is fast enough and always consistent with ingestion, so no rollup tables or caches are needed yet (revisit if 30-day queries exceed ~1 s). The health label is a transparent, documented rule with reasons attached, so users see *why* a service is flagged; learned baselines (Phase 12) and user-defined alert rules (Phase 15) will refine it rather than replace this explanation. Treating 4xx as client behaviour avoids flagging services for users' 404s.
 
+## ADR-021 — Database monitoring over raw calls (2026-11-23)
+
+**Decision:** Database monitoring queries `database_operations` directly (one row per call) and computes exact percentiles with `percentile_cont`, rather than pre-aggregating into histograms like `api_metrics`. Query shapes are grouped by (system, operation type, sanitized statement, table). Database health uses the HTTP error thresholds but tighter latency ones (p95 warning 200 ms, critical 1000 ms). Connection-pool gauges are read from OTLP metric points under both the stable (`db.client.connection.*`, `db.client.connection.state`) and older experimental (`db.client.connections.*`, `state`) names, because the Java agent emits the older names unless the stable database conventions are opted in.
+
+**Why:** Raw rows are already stored for drill-down (each call keeps its trace ID, so the slowest call of a query links to its trace), and at the target scale exact percentiles over a time-bounded index range are affordable and more trustworthy than bucket estimates. A per-query p95 of 200 ms is already a strong signal because one request may run several queries. If retention or volume grows (KNOWN_ISSUES #27), add a per-minute rollup like `api_metrics` without changing the API.
+

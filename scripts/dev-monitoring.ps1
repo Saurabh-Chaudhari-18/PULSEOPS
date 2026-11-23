@@ -61,6 +61,32 @@ $e.endpoints | Select-Object method, route, requests,
         @{ n = "p95"; e = { Format-Ms $_.p95Ms } },
         @{ n = "p99"; e = { Format-Ms $_.p99Ms } } | Format-Table -AutoSize
 
+$d = Invoke-Api GET "$base/database/summary?from=$from" -Token $token
+Write-Host ""
+Write-Host "Database  [$($d.health.status)]" -ForegroundColor Cyan
+foreach ($reason in $d.health.reasons) { Write-Host "  - $reason" }
+Write-Host ("Calls {0}  ({1:N2}/s)   errors {2} ({3})   slow (>= {4:N0} ms) {5}" -f `
+        $d.calls, $d.callsPerSecond, $d.errors, (Format-Pct $d.errorRate), $d.slowThresholdMs, $d.slowCalls)
+Write-Host ("Duration avg {0}   p50 {1}   p95 {2}   p99 {3}   max {4}" -f `
+        (Format-Ms $d.avgMs), (Format-Ms $d.p50Ms), (Format-Ms $d.p95Ms), (Format-Ms $d.p99Ms), (Format-Ms $d.maxMs))
+$o = Invoke-Api GET "$base/database/operations?from=$from&limit=8" -Token $token
+$o.operations | Select-Object operationType,
+        @{ n = "query"; e = { if ($null -eq $_.operation) { "-" } elseif ($_.operation.Length -gt 60) { $_.operation.Substring(0, 57) + "..." } else { $_.operation } } },
+        calls, errors,
+        @{ n = "time share"; e = { Format-Pct $_.shareOfTime } },
+        @{ n = "avg"; e = { Format-Ms $_.avgMs } },
+        @{ n = "p95"; e = { Format-Ms $_.p95Ms } },
+        @{ n = "slow"; e = { $_.slowCalls } } | Format-Table -AutoSize
+$pool = Invoke-Api GET "$base/database/pool?from=$from" -Token $token
+if ($pool.available) {
+    $lastPool = $pool.points | Where-Object { $null -ne $_.used -or $null -ne $_.idle } | Select-Object -Last 1
+    Write-Host ("Connection pool {0} (latest)  used {1}   idle {2}   max {3}   waiting {4}" -f `
+            ($pool.pools -join ", "), $lastPool.used, $lastPool.idle, $lastPool.max, $lastPool.pending)
+} else {
+    Write-Host "No connection-pool metrics received in this window."
+}
+Write-Host ""
+
 $r = Invoke-Api GET "$base/runtime?from=$from" -Token $token
 if ($r.available) {
     $last = $r.points | Where-Object { $null -ne $_.heapUsedBytes -or $null -ne $_.cpuUtilization } | Select-Object -Last 1
