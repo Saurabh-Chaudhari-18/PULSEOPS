@@ -326,9 +326,47 @@ class FullJourneyIntegrationTest {
                 .as("the test export has no pool metrics").isFalse();
         call(carol, get(monitoring + "/database/operations?sort=fastest"), null, 400);
 
+        // 8. Logs and traces explorer (Phase 11).
+        String orgApi = "/api/v1/organizations/" + orgId;
+        JsonNode tracePage = body(call(carol, get(orgApi + "/traces?serviceId=" + serviceId), null, 200));
+        assertThat(tracePage.get("traces")).hasSize(1);
+        JsonNode traceSummary = tracePage.get("traces").get(0);
+        assertThat(traceSummary.get("traceId").asText()).isEqualTo(OtlpTestData.TRACE_ID);
+        assertThat(traceSummary.get("rootName").asText()).isEqualTo("GET /orders/{id}");
+        assertThat(traceSummary.get("spans").asLong()).isEqualTo(2);
+        assertThat(traceSummary.get("errorSpans").asLong()).isEqualTo(1);
+        assertThat(body(call(carol, get(orgApi + "/traces?minDurationMs=500"), null, 200)).get("traces")).isEmpty();
+
+        JsonNode trace = body(call(carol, get(orgApi + "/traces/" + OtlpTestData.TRACE_ID), null, 200));
+        assertThat(trace.get("complete").asBoolean()).isTrue();
+        assertThat(trace.get("spans").get(0).get("spanId").asText()).isEqualTo(OtlpTestData.SERVER_SPAN_ID);
+        assertThat(trace.get("spans").get(1).get("depth").asInt()).isEqualTo(1);
+        assertThat(trace.get("spans").get(1).get("offsetMs").asDouble()).isEqualTo(5.0);
+        assertThat(trace.get("logs").size()).as("exception log(s) + the WARN log of the trace").isGreaterThanOrEqualTo(2);
+
+        JsonNode warn = body(call(carol, get(orgApi + "/logs?minLevel=WARN&q=payment"), null, 200));
+        assertThat(warn.get("logs")).hasSize(1);
+        assertThat(warn.get("logs").get(0).get("message").asText()).isEqualTo("Payment retry for card [REDACTED]");
+        assertThat(warn.get("logs").get(0).get("serviceName").asText()).isEqualTo("checkout");
+        JsonNode page1 = body(call(carol, get(orgApi + "/logs?limit=1"), null, 200));
+        assertThat(page1.get("nextCursor").isNull()).isFalse();
+        JsonNode page2 = body(call(carol, get(orgApi + "/logs?limit=1&cursor=" + page1.get("nextCursor").asText()),
+                null, 200));
+        assertThat(page2.get("logs").get(0).get("id").asText()).isNotEqualTo(page1.get("logs").get(0).get("id").asText());
+        JsonNode histogram = body(call(carol, get(orgApi + "/logs/histogram"), null, 200));
+        long histogramTotal = 0;
+        for (JsonNode b : histogram.get("buckets")) {
+            histogramTotal += b.get("total").asLong();
+        }
+        assertThat(histogramTotal).isGreaterThanOrEqualTo(2);
+        call(carol, get(orgApi + "/traces/not-a-trace"), null, 400);
+        call(carol, get(orgApi + "/traces/" + "0".repeat(31) + "1"), null, 404);
+        call(carol, get(orgApi + "/logs?cursor=garbage"), null, 400);
+
         call(carol, get(monitoring + "/summary?from=not-a-time"), null, 400);
         Session mallory = registerAndLogin("mallory-" + suffix + "@it.test");
         call(mallory, get(monitoring + "/summary"), null, 404);
+        call(mallory, get("/api/v1/organizations/" + orgId + "/traces/" + OtlpTestData.TRACE_ID), null, 404);
     }
 
     @Test

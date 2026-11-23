@@ -12,7 +12,7 @@ public final class MonitoringViews {
     }
 
     public record Window(Instant from, Instant to, int stepSeconds) {
-        static Window of(TimeWindow w) {
+        public static Window of(TimeWindow w) {
             return new Window(w.from(), w.to(), w.stepSeconds());
         }
     }

@@ -130,3 +130,9 @@ Short, dated records of decisions that shape the system. Newest last.
 
 **Why:** Raw rows are already stored for drill-down (each call keeps its trace ID, so the slowest call of a query links to its trace), and at the target scale exact percentiles over a time-bounded index range are affordable and more trustworthy than bucket estimates. A per-query p95 of 200 ms is already a strong signal because one request may run several queries. If retention or volume grows (KNOWN_ISSUES #27), add a per-minute rollup like `api_metrics` without changing the API.
 
+## ADR-022 — Logs and traces explorer: keyset pagination, trace assembly at read time (2026-11-23)
+
+**Decision:** Log and trace lists are ordered newest first and paginated with an opaque keyset cursor (last row's time and ID), not offsets. Traces are assembled at read time from `distributed_traces`: a trace matches when any of its spans falls in the window (optionally for one service) and is summarised over **all** its spans in the organization; the root is the span without a parent (else the earliest span, flagged `complete=false`). A trace view orders spans depth-first by start time; spans whose parent never arrived are shown as orphan roots rather than dropped. Message search is a case-insensitive substring match.
+
+**Why:** Telemetry is append-heavy, so offset pages shift while a user reads them; keyset cursors are stable and use the time indexes. Storing only spans (no separate trace table) keeps ingestion simple and idempotent (ADR-018) and avoids reconciling partial traces whose spans arrive from several services at different times. Substring search needs no extra infrastructure; a trigram or full-text index can be added later if log volume demands it (KNOWN_ISSUES #29).
+

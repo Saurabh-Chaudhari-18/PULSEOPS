@@ -19,7 +19,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 8 | Java Sample Application Integration | COMPLETED |
 | 9 | Application and API Monitoring | COMPLETED |
 | 10 | Database Monitoring | COMPLETED |
-| 11 | Logs and Distributed Traces | NOT STARTED |
+| 11 | Logs and Distributed Traces | IMPLEMENTED — awaiting PC run |
 | 12 | Python ML Service and Anomaly Detection | NOT STARTED |
 | 13 | Incident Correlation | NOT STARTED |
 | 14 | Root Cause Analysis and Recommendations | NOT STARTED |
@@ -206,4 +206,17 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Acceptance on live data (sample + Java agent, `slow-db` fault, last 5 minutes):** database health CRITICAL ("p95 latency 1514 ms"), 623 calls, 168 slow; `SELECT PULSE_SLEEP(?)` first with 99.9 % of database time (avg 1509 ms) while the Hibernate order queries stayed at 0–1 ms; statements shown with literals removed; HikariCP pool gauges received from the agent (used ≈ 1.25, idle ≈ 8.75, max 10, waiting 0); the HTTP view simultaneously showed the two affected endpoints (`/api/orders/{id}`, `/api/orders/report`) at ~1.5 s.
 
-**Next:** Phase 11 (logs and distributed traces).
+## Phase 11 — Logs and Distributed Traces — IMPLEMENTED, awaiting PC run (2026-11-23)
+
+**Completed (code):** `explore` module (ADR-022).
+- `LogExplorerService`: search by time, service, minimum or exact levels, message text and trace ID, newest first with keyset cursors; per-level volume histogram.
+- `TraceExplorerService`: trace search (recent with cursors, or slowest), filters for service, minimum duration, errors only and root operation; single trace as a depth-first span tree with offsets, orphans, attributes and the trace's logs.
+- `TraceTree` (depth-first ordering, orphan roots, cycle-safe) and `Cursor` (opaque, validated).
+- `ExplorerController` (4 endpoints, `telemetry.read`); `scripts/dev-explore.ps1` prints recent warnings/errors, the slowest traces and the slowest trace's tree.
+
+**Tests executed (cloud):**
+- ✅ All 5 explorer queries prepared and executed as `pulseops_app` under RLS on PostgreSQL 16 with fixture spans and logs: pagination resumes exactly after the cursor row; level/text/trace filters; histogram per level; recent vs slowest ordering; error-only, duration and name filters; trace cursor; a trace with an unreceived root reported `has_root=false`; another tenant's span with the **same trace ID** never appears in counts or trees.
+- ✅ `CursorAndTreeTest` (9 checks: micro-second cursor round trip, tampered cursors, depth-first order, orphans, cycles) compiled and executed.
+- ✅ Offline javac checks over 209 files.
+
+**Pending on the PC:** `ExplorerServicesTest` and the extended OTLP journey (trace list and filters, trace tree with offsets and logs, log search with level + text, cursor paging, histogram, 400s for bad trace ID/cursor, 404 for unknown and foreign traces), plus a live look with `dev-explore.ps1`.

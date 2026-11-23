@@ -215,4 +215,15 @@ Under `/api/v1/organizations/{orgId}/services/{serviceId}/monitoring/database`, 
 
 The organization overview also includes `database` totals (calls, errors, error rate, slow calls, p95, health).
 
-*Pending:* logs and traces (Phase 11).
+## Logs and traces (JWT; permission `telemetry.read`)
+
+Under `/api/v1/organizations/{orgId}`; same `from`/`to` rules (default last hour, ≤ 31 days). Lists are **newest first with keyset pagination**: pass the returned `nextCursor` as `cursor` for the next page (`null` on the last page). Log messages and attributes were redacted at ingestion.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /logs?from&to&serviceId&minLevel&levels&q&traceId&cursor&limit` | Log entries (service name, time, level, message, logger, trace/span IDs, attributes). `minLevel` (TRACE…FATAL, `WARNING` accepted) or exact `levels` (comma list); `q` = case-insensitive text in the message (≤ 200 chars); `traceId` = 32 hex; `limit` 1–500 (default 100) |
+| `GET /logs/histogram?from&to&step&…same filters` | Per step: total and count per level (log volume chart) |
+| `GET /traces?from&to&serviceId&minDurationMs&errorsOnly&name&sort&cursor&limit` | Traces with a span in the window (and service): start, duration (first span start → last span end), span and error counts, number of services, root operation and service, `complete` (root span received). `sort` = `recent` (paginated) or `slowest`; `name` filters the root operation; `limit` 1–200 (default 50) |
+| `GET /traces/{traceId}` | All spans (≤ 2000) as a depth-first tree — `depth`, `offsetMs` from trace start, duration, status, attributes, `orphan` when the parent span was not received — plus the trace's logs (≤ 500), services, totals, `complete`, `truncated` |
+
+Errors: 400 `INVALID_TIME_RANGE`, `INVALID_LEVEL`, `INVALID_TRACE_ID`, `INVALID_CURSOR`, `INVALID_SORT`, `INVALID_DURATION`, `QUERY_TOO_LONG`; 404 `TRACE_NOT_FOUND` (also for another organization's trace ID).
