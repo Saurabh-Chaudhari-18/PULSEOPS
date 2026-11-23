@@ -40,7 +40,7 @@ if (-not $org) { throw "Organization '$OrgName' not found; run dev-bootstrap.ps1
 $service = Find-ByName (Invoke-Api GET "/api/v1/organizations/$($org.id)/services?size=100" -Token $token).content $ServiceName
 if (-not $service) { throw "Service '$ServiceName' not found; run dev-bootstrap.ps1 first." }
 
-$from = [DateTime]::UtcNow.AddMinutes(-$Minutes).ToString("yyyy-MM-ddTHH:mm:ssZ")
+$from = [DateTime]::UtcNow.AddMinutes(-$Minutes).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
 $base = "/api/v1/organizations/$($org.id)/services/$($service.id)/monitoring"
 $s = Invoke-Api GET "$base/summary?from=$from" -Token $token
 
