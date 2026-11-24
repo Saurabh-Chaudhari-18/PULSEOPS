@@ -40,3 +40,4 @@
 | 36 | Incidents | Incident evidence is read live from telemetry, so once raw data passes its retention period an old incident's evidence lists become empty (anomalies, timeline and notes remain). | ACCEPTED |
 | 37 | Incidents | Correlation runs inside the detection job; while detection is disabled or the ML service is down, existing incidents are not auto-resolved either. | ACCEPTED (visible in `GET /anomalies/detection-status`) |
 | 38 | ML client | Java's HTTP client defaulted to HTTP/2 and asked uvicorn to upgrade every request ("Unsupported upgrade request" warnings; requests still succeeded over HTTP/1.1). | FIXED (2026-11-24) — the ML client now uses HTTP/1.1 |
+| 39 | Anomaly detection | Connection-pool utilisation rising from 0 % to 20 % during the slow-database test was reported (low) and linked to the incident, although a pool at 20 % is healthy. | FIXED (2026-11-24) — pool findings now need ≥ 50 % utilisation |

@@ -111,3 +111,13 @@ def test_small_baselines_keep_a_decimal_in_the_reason():
     result = detect(Metric.DB_DURATION, [Point(0.7, 30)] * 60 + [Point(1514, 30)] * 5)
     assert result.reason.startswith("Database p95 1514 ms is far above its usual 0.7 ms (2162.9x)")
 
+
+
+def test_connection_pool_use_is_reported_only_when_high():
+    # Live finding on 2026-11-24: 0% -> 20% during a slow-database fault was flagged; at that
+    # level the pool is healthy, so it is noise. From 50% it is worth reporting.
+    assert detect(Metric.CONNECTION_UTILIZATION, [Point(0.0)] * 60 + [Point(0.2)] * 5) is None
+    result = detect(Metric.CONNECTION_UTILIZATION, [Point(0.05)] * 60 + [Point(0.9)] * 5)
+    assert isinstance(result, Finding)
+    assert result.severity == "high"
+    assert result.reason.startswith("Connection pool utilisation 90.0% is far above its usual 5.0%")

@@ -61,6 +61,7 @@ class Rules:
     min_ratio: float          # ... and be at least this many times the centre (upward)
     min_samples: int          # points backed by fewer samples are ignored (0 = no check)
     unit: str
+    min_observed: float = 0.0  # upward findings need at least this level (pool use only matters when high)
 
 
 RULES = {
@@ -68,7 +69,7 @@ RULES = {
     Metric.DB_DURATION: Rules("up", 2.0, 0.10, 20.0, 1.5, 3, "ms"),
     Metric.ERROR_RATE: Rules("up", 0.005, 0.25, 0.02, 1.0, 1, ""),
     Metric.REQUEST_RATE: Rules("both", 0.02, 0.10, 0.2, 2.0, 0, "req/s"),
-    Metric.CONNECTION_UTILIZATION: Rules("up", 0.02, 0.10, 0.2, 1.25, 0, ""),
+    Metric.CONNECTION_UTILIZATION: Rules("up", 0.02, 0.10, 0.2, 1.25, 0, "", min_observed=0.5),
 }
 
 MIN_BASELINE_POINTS = 30
@@ -146,6 +147,8 @@ def detect(
         if delta < rules.min_delta_abs:
             return None
         if centre > 0 and observed < centre * rules.min_ratio:
+            return None
+        if observed < rules.min_observed:
             return None
         severity = _severity_up(metric, observed, centre)
         return Finding("spike", severity, min(z, MAX_SCORE), observed, centre, spread, int(baseline.size),
