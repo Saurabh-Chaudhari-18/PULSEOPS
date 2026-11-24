@@ -249,7 +249,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Next:** Phase 13 (incident correlation).
 
-## Phase 13 — Incident Correlation and Incident Management — CODE COMPLETE, awaiting PC test run (2026-11-24)
+## Phase 13 — Incident Correlation and Incident Management — COMPLETED (2026-11-24)
 
 **Completed (code):**
 - `IncidentCorrelator` (ADR-025), run after every detection pass per organization: new anomalies join their project's active automatic incident or open one (≥ 2 anomalies, or one high/critical); severity raised to the worst anomaly; title/summary regenerated while nobody has acted; `anomalies_recovered` event and automatic resolution of untouched incidents once all linked anomalies have ended. Detection status reports `incidentsCreated`.
@@ -266,4 +266,8 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - ✅ Offline javac checks over 225 files.
 - ⏳ To run on the PC: `IncidentRulesTest`, `IncidentServiceParamsTest`, and journey step 10 (automatic incident from the stub's high finding, no duplicate on repeat, detail/timeline, self-resolution after the anomaly is dismissed, manual incident lifecycle, assignment, comments, 409/400/404 cases, cross-tenant 404).
 
-**Live acceptance (2026-11-24, sample + Java agent + real ML service on Windows):** the `slow-db` fault opened exactly **one** automatic incident, critical, titled "Latency increase on order-service (database slower)". It linked the four critical anomalies (service p95, `GET /api/orders/{id}`, `GET /api/orders/report`, database p95 1514 ms vs usual 1.2 ms) plus a later low pool-utilisation finding, which joined the same incident 4 minutes afterwards. The summary listed them worst first; the timeline showed creation and each link by PulseOps. The evidence window (14:13–14:31) put `SELECT PULSE_SLEEP(?)` first among slow statements (p95 1515 ms, 627 calls), with the slow report traces. Findings: (1) the pool finding at 20 % was noise → pool findings now need ≥ 50 % (ML test added; KNOWN_ISSUES #39); (2) evidence logs were the sample's routine "Payment declined" warnings, unrelated to the fault — ranking evidence by relevance belongs to root-cause analysis (Phase 14). Backend test count on the PC and the auto-resolution step are still to be reported.
+**Live acceptance (2026-11-24, sample + Java agent + real ML service on Windows):** the `slow-db` fault opened exactly **one** automatic incident, critical, titled "Latency increase on order-service (database slower)". It linked the four critical anomalies (service p95, `GET /api/orders/{id}`, `GET /api/orders/report`, database p95 1514 ms vs usual 1.2 ms) plus a later low pool-utilisation finding, which joined the same incident 4 minutes afterwards. The summary listed them worst first; the timeline showed creation and each link by PulseOps. The evidence window (14:13–14:31) put `SELECT PULSE_SLEEP(?)` first among slow statements (p95 1515 ms, 627 calls), with the slow report traces. Findings: (1) the pool finding at 20 % was noise → pool findings now need ≥ 50 % (ML test added; KNOWN_ISSUES #39); (2) evidence logs were the sample's routine "Payment declined" warnings, unrelated to the fault — ranking evidence by relevance belongs to root-cause analysis (Phase 14). 
+
+**Final PC results (2026-11-24):** backend **257/257 passed** (incl. `IncidentRulesTest`, `IncidentServiceParamsTest` and journey step 10, which exercises automatic resolution end to end against PostgreSQL); ML service **31/31 passed** with the pool-utilisation floor. Automatic resolution after the live fault was switched off was not separately observed on the PC; it is covered by the journey test and will be seen again in the frontend work.
+
+**Next:** frontend for Phases 1–13 (in parts), then Phase 14 (root-cause analysis).
