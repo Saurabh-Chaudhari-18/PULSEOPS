@@ -14,7 +14,11 @@ import { CreateOrganizationPage } from './pages/org/CreateOrganizationPage';
 import { HomeRedirect } from './pages/org/HomeRedirect';
 import { ProjectPage } from './pages/projects/ProjectPage';
 import { ProjectsPage } from './pages/projects/ProjectsPage';
-import { ServicePage } from './pages/services/ServicePage';
+import { OverviewPage } from './pages/overview/OverviewPage';
+import { ServiceConnectionTab } from './pages/services/ServiceConnectionTab';
+import { ServiceDatabaseTab } from './pages/services/ServiceDatabaseTab';
+import { ServicePerformanceTab } from './pages/services/ServicePerformanceTab';
+import { ServiceShell } from './pages/services/ServiceShell';
 import { TeamPage } from './pages/team/TeamPage';
 import { theme } from './theme';
 
@@ -32,8 +36,22 @@ export function createQueryClient() {
 }
 
 const router = createBrowserRouter([
-  { path: '/login', element: <RedirectIfSignedIn><LoginPage /></RedirectIfSignedIn> },
-  { path: '/register', element: <RedirectIfSignedIn><RegisterPage /></RedirectIfSignedIn> },
+  {
+    path: '/login',
+    element: (
+      <RedirectIfSignedIn>
+        <LoginPage />
+      </RedirectIfSignedIn>
+    ),
+  },
+  {
+    path: '/register',
+    element: (
+      <RedirectIfSignedIn>
+        <RegisterPage />
+      </RedirectIfSignedIn>
+    ),
+  },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/verify-email', element: <VerifyEmailPage /> },
@@ -46,10 +64,19 @@ const router = createBrowserRouter([
         path: '/o/:orgId',
         element: <AppLayout />,
         children: [
-          { index: true, element: <Navigate to="projects" replace /> },
+          { index: true, element: <Navigate to="overview" replace /> },
+          { path: 'overview', element: <OverviewPage /> },
           { path: 'projects', element: <ProjectsPage /> },
           { path: 'projects/:projectId', element: <ProjectPage /> },
-          { path: 'services/:serviceId', element: <ServicePage /> },
+          {
+            path: 'services/:serviceId',
+            element: <ServiceShell />,
+            children: [
+              { index: true, element: <ServicePerformanceTab /> },
+              { path: 'database', element: <ServiceDatabaseTab /> },
+              { path: 'connection', element: <ServiceConnectionTab /> },
+            ],
+          },
           { path: 'team', element: <TeamPage /> },
           { path: 'account', element: <AccountPage /> },
           { path: '*', element: <NotFoundPage /> },

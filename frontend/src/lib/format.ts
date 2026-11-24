@@ -90,7 +90,9 @@ export function isFresh(lastTelemetryAt: string | null | undefined, now: Date = 
 export function connectionView(status: ConnectionStatus | null | undefined, receivingNow?: boolean): ConnectionView {
   switch (status) {
     case 'CONNECTED':
-      return receivingNow === false ? { health: 'watch', label: 'Connected, no recent data' } : { health: 'ok', label: 'Connected' };
+      return receivingNow === false
+        ? { health: 'watch', label: 'Connected, no recent data' }
+        : { health: 'ok', label: 'Connected' };
     case 'WAITING_FOR_DATA':
       return { health: 'watch', label: 'Waiting for data' };
     case 'CONNECTION_ERROR':

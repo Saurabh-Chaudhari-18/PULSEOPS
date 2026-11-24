@@ -39,7 +39,10 @@ export function ProjectPage() {
   const [revoking, setRevoking] = useState<Credential | null>(null);
   const [confirm, setConfirm] = useState<'archive' | 'restore' | 'delete' | null>(null);
 
-  const project = useQuery({ queryKey: ['project', orgId, projectId], queryFn: () => projectApi.get(orgId, projectId) });
+  const project = useQuery({
+    queryKey: ['project', orgId, projectId],
+    queryFn: () => projectApi.get(orgId, projectId),
+  });
   const services = useQuery({
     queryKey: ['services', orgId, projectId],
     queryFn: () => serviceApi.listForProject(orgId, projectId),
@@ -156,7 +159,11 @@ export function ProjectPage() {
                   return (
                     <TableRow key={s.id} hover>
                       <TableCell>
-                        <Link component={RouterLink} to={`/o/${orgId}/services/${s.id}`} sx={{ fontWeight: 600, fontSize: 14 }}>
+                        <Link
+                          component={RouterLink}
+                          to={`/o/${orgId}/services/${s.id}${s.connection?.firstTelemetryAt ? '' : '/connection'}`}
+                          sx={{ fontWeight: 600, fontSize: 14 }}
+                        >
                           {s.name}
                         </Link>
                         {s.status === 'ARCHIVED' && (
@@ -167,7 +174,9 @@ export function ProjectPage() {
                       <TableCell>
                         <Signal health={view.health} label={view.label} />
                       </TableCell>
-                      <TableCell>{s.connection?.lastTelemetryAt ? timeAgo(s.connection.lastTelemetryAt) : 'none yet'}</TableCell>
+                      <TableCell>
+                        {s.connection?.lastTelemetryAt ? timeAgo(s.connection.lastTelemetryAt) : 'none yet'}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -200,7 +209,9 @@ export function ProjectPage() {
               <Loading label="Loading keys" />
             </Box>
           ) : keys.data && keys.data.length === 0 ? (
-            <EmptyState title="No keys yet">Create one when you connect a service; the connection guide can do it for you.</EmptyState>
+            <EmptyState title="No keys yet">
+              Create one when you connect a service; the connection guide can do it for you.
+            </EmptyState>
           ) : (
             keys.data && (
               <TableContainer>
@@ -265,7 +276,7 @@ export function ProjectPage() {
         onCreated={(service) => {
           setAddingService(false);
           refresh();
-          navigate(`/o/${orgId}/services/${service.id}`);
+          navigate(`/o/${orgId}/services/${service.id}/connection`);
         }}
       />
       <IssueKeyDialog
@@ -328,8 +339,8 @@ export function ProjectPage() {
           navigate(`/o/${orgId}/projects`, { replace: true });
         }}
       >
-        Its services are deleted and every key of the project is revoked, so connected applications stop sending data
-        at once.
+        Its services are deleted and every key of the project is revoked, so connected applications stop sending data at
+        once.
       </ConfirmDialog>
     </>
   );

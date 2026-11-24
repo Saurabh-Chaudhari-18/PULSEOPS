@@ -25,7 +25,7 @@ export function CreateOrganizationPage() {
     try {
       const org = await orgApi.create(name.trim(), description.trim() || undefined);
       await queryClient.invalidateQueries({ queryKey: ['organizations'] });
-      navigate(`/o/${org.id}/projects`, { replace: true });
+      navigate(`/o/${org.id}/projects`, { replace: true }); // a new organization has nothing to observe yet
     } catch (e) {
       form.setError(e);
     } finally {
@@ -41,7 +41,9 @@ export function CreateOrganizationPage() {
           <Typography sx={{ fontWeight: 600, fontSize: 16 }}>PulseOps</Typography>
         </Box>
         <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 } }}>
-          <Typography variant="h1">{first ? `Welcome, ${user?.fullName?.split(' ')[0] ?? ''}` : 'New organization'}</Typography>
+          <Typography variant="h1">
+            {first ? `Welcome, ${user?.fullName?.split(' ')[0] ?? ''}` : 'New organization'}
+          </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.75, mb: 3 }}>
             {first
               ? 'Start with an organization: usually your company or team. Its projects, services and data are visible only to its members.'

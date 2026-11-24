@@ -45,7 +45,13 @@ function Trace() {
 
 export function AuthLayout({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
   return (
-    <Box sx={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.1fr) minmax(420px, 1fr)' } }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.1fr) minmax(420px, 1fr)' },
+      }}
+    >
       <Box
         sx={{
           bgcolor: tokens.ink,
@@ -64,7 +70,14 @@ export function AuthLayout({ title, intro, children }: { title: string; intro?: 
         <Box>
           <Trace />
           <Typography
-            sx={{ color: '#FFFFFF', fontSize: { xs: 22, md: 30 }, fontWeight: 500, lineHeight: 1.25, mt: 3, maxWidth: '22ch' }}
+            sx={{
+              color: '#FFFFFF',
+              fontSize: { xs: 22, md: 30 },
+              fontWeight: 500,
+              lineHeight: 1.25,
+              mt: 3,
+              maxWidth: '22ch',
+            }}
           >
             Know when something changes, and why.
           </Typography>
@@ -77,7 +90,15 @@ export function AuthLayout({ title, intro, children }: { title: string; intro?: 
           Self-hosted or SaaS. Your data stays in your organization.
         </Typography>
       </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: { xs: 3, md: 6 }, bgcolor: 'background.paper' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: { xs: 3, md: 6 },
+          bgcolor: 'background.paper',
+        }}
+      >
         <Box sx={{ width: '100%', maxWidth: 380 }}>
           <Typography variant="h1" component="h1">
             {title}

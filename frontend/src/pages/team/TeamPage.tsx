@@ -35,7 +35,17 @@ import { useFormError } from '../../lib/useFormError';
 
 const ROLES: Role[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'];
 
-function AddMemberDialog({ orgId, open, onClose, onAdded }: { orgId: string; open: boolean; onClose: () => void; onAdded: () => void }) {
+function AddMemberDialog({
+  orgId,
+  open,
+  onClose,
+  onAdded,
+}: {
+  orgId: string;
+  open: boolean;
+  onClose: () => void;
+  onAdded: () => void;
+}) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('MEMBER');
   const [busy, setBusy] = useState(false);
@@ -191,7 +201,7 @@ export function TeamPage() {
                             ))}
                           </Select>
                         ) : (
-                          roleLabel[m.role] ?? m.role
+                          (roleLabel[m.role] ?? m.role)
                         )}
                       </TableCell>
                       <TableCell>{m.status === 'INVITED' ? 'Invited' : formatDate(m.joinedAt)}</TableCell>

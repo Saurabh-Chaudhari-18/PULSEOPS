@@ -42,7 +42,14 @@ export function CodeBlock({ code, label = 'Copy' }: { code: string; label?: stri
           }
         }}
         startIcon={copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
-        sx={{ position: 'absolute', top: 8, right: 8, color: '#E6EBF3', bgcolor: tokens.sidebarActive, '&:hover': { bgcolor: '#33425E' } }}
+        sx={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          color: '#E6EBF3',
+          bgcolor: tokens.sidebarActive,
+          '&:hover': { bgcolor: '#33425E' },
+        }}
       >
         {copied ? 'Copied' : label}
       </Button>

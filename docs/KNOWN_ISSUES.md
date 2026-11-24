@@ -45,3 +45,5 @@
 | 41 | Frontend | Adding a member requires the person to have registered first (the backend has no email invitations yet). | OPEN (Phase 15 notifications) |
 | 42 | Frontend dependencies | `npm audit` (2026-11-24) reported 2 critical and 1 moderate advisories, all in the test runner (Vitest 3.2 via `tinypool` and `@vitest/mocker`); they affect only running tests on a developer machine and are not part of the built app. | FIXED (2026-11-24) — Vitest 4.1.12; `npm audit` reports 0 vulnerabilities on the PC |
 | 43 | Frontend | The services list showed green "Connected" for a service whose last data was an hour old, while its own page correctly said "no recent data". | FIXED (2026-11-24) — lists apply the same 15-minute freshness rule |
+| 44 | Frontend | The organization overview shows totals for the period but no trend chart: the backend has no organization-wide time series yet. Per-service trends are on each service page. | OPEN (Phase 16 analytics) |
+| 45 | Frontend | Trace IDs in the database tab are shown but not yet linked; the trace explorer arrives in frontend part 2b. | OPEN (part 2b) |

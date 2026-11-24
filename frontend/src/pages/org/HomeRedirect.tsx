@@ -26,5 +26,5 @@ export function HomeRedirect() {
   if (list.length === 0) return <Navigate to="/organizations/new" replace />;
   const last = lastOrganization();
   const target = list.find((o) => o.id === last) ?? list[0];
-  return <Navigate to={`/o/${target.id}/projects`} replace />;
+  return <Navigate to={`/o/${target.id}`} replace />;
 }

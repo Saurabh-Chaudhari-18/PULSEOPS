@@ -1,7 +1,17 @@
 import { api, type Session } from './client';
 import type {
   AppService,
+  ConnectionPool,
   Credential,
+  DatabaseSummary,
+  DbCallList,
+  DbOperationList,
+  DbSeries,
+  EndpointList,
+  OrganizationOverview,
+  RuntimeMetrics,
+  ServiceSummary,
+  TimeSeries,
   Environment,
   Instructions,
   IntegrationStatus,
@@ -106,4 +116,41 @@ export const credentialApi = {
     api.post<Credential>(`${org(orgId)}/credentials/${credentialId}/revoke`),
   rotate: (orgId: string, credentialId: string, graceHours: number) =>
     api.post<IssuedCredential>(`${org(orgId)}/credentials/${credentialId}/rotate`, { graceHours }),
+};
+
+export interface Range {
+  from: string;
+  to: string;
+}
+
+const svcMon = (orgId: string, serviceId: string) => `${org(orgId)}/services/${serviceId}/monitoring`;
+
+export const monitoringApi = {
+  overview: (orgId: string, range: Range, projectId?: string) =>
+    api.get<OrganizationOverview>(`${org(orgId)}/monitoring/overview`, { query: { ...range, projectId } }),
+  summary: (orgId: string, serviceId: string, range: Range) =>
+    api.get<ServiceSummary>(`${svcMon(orgId, serviceId)}/summary`, { query: { ...range } }),
+  timeseries: (orgId: string, serviceId: string, range: Range, endpoint?: { method: string; route: string }) =>
+    api.get<TimeSeries>(`${svcMon(orgId, serviceId)}/timeseries`, {
+      query: { ...range, method: endpoint?.method, route: endpoint?.route },
+    }),
+  endpoints: (orgId: string, serviceId: string, range: Range, sort: string, search?: string) =>
+    api.get<EndpointList>(`${svcMon(orgId, serviceId)}/endpoints`, { query: { ...range, sort, search, limit: 100 } }),
+  runtime: (orgId: string, serviceId: string, range: Range) =>
+    api.get<RuntimeMetrics>(`${svcMon(orgId, serviceId)}/runtime`, { query: { ...range } }),
+};
+
+export const databaseApi = {
+  summary: (orgId: string, serviceId: string, range: Range) =>
+    api.get<DatabaseSummary>(`${svcMon(orgId, serviceId)}/database/summary`, { query: { ...range } }),
+  operations: (orgId: string, serviceId: string, range: Range, sort: string, search?: string) =>
+    api.get<DbOperationList>(`${svcMon(orgId, serviceId)}/database/operations`, {
+      query: { ...range, sort, search, limit: 100 },
+    }),
+  timeseries: (orgId: string, serviceId: string, range: Range, operation?: string) =>
+    api.get<DbSeries>(`${svcMon(orgId, serviceId)}/database/timeseries`, { query: { ...range, operation } }),
+  calls: (orgId: string, serviceId: string, range: Range, errorsOnly: boolean) =>
+    api.get<DbCallList>(`${svcMon(orgId, serviceId)}/database/calls`, { query: { ...range, errorsOnly, limit: 50 } }),
+  pool: (orgId: string, serviceId: string, range: Range) =>
+    api.get<ConnectionPool>(`${svcMon(orgId, serviceId)}/database/pool`, { query: { ...range } }),
 };

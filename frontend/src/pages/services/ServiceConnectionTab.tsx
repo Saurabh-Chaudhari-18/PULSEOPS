@@ -1,18 +1,17 @@
 import { useState, type ReactNode } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, ButtonBase, Chip, Link, Typography } from '@mui/material';
+import { Alert, Box, Button, ButtonBase, Link, Typography } from '@mui/material';
 import { credentialApi, integrationApi, serviceApi } from '../../api/endpoints';
 import type { IntegrationType, IssuedCredential } from '../../api/types';
 import { errorMessage } from '../../api/client';
 import { CodeBlock } from '../../components/CodeBlock';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ErrorNotice, Loading } from '../../components/Feedback';
-import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { Signal } from '../../components/Signal';
 import { P, useOrg } from '../../layout/OrgContext';
-import { connectionView, formatDateTime, integrationLabel, technologyLabel, timeAgo } from '../../lib/format';
+import { connectionView, formatDateTime, integrationLabel, timeAgo } from '../../lib/format';
 import { tokens } from '../../theme';
 import { IssuedKeyNotice } from '../projects/KeyDialogs';
 
@@ -37,7 +36,15 @@ const METHODS: { type: IntegrationType; title: string; detail: string }[] = [
 /** One step of the guide. The steps really are a sequence, so they carry numbers. */
 function Step({ n, title, done, children }: { n: number; title: string; done?: boolean; children: ReactNode }) {
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '32px 1fr', gap: 2, py: 2.5, '& + &': { borderTop: 1, borderColor: 'divider' } }}>
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: '32px 1fr',
+        gap: 2,
+        py: 2.5,
+        '& + &': { borderTop: 1, borderColor: 'divider' },
+      }}
+    >
       <Box
         sx={{
           width: 28,
@@ -64,7 +71,7 @@ function Step({ n, title, done, children }: { n: number; title: string; done?: b
   );
 }
 
-export function ServicePage() {
+export function ServiceConnectionTab() {
   const { serviceId = '' } = useParams();
   const { organization, can } = useOrg();
   const orgId = organization.id;
@@ -74,7 +81,10 @@ export function ServicePage() {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<'archive' | 'restore' | 'disable' | null>(null);
 
-  const service = useQuery({ queryKey: ['service', orgId, serviceId], queryFn: () => serviceApi.get(orgId, serviceId) });
+  const service = useQuery({
+    queryKey: ['service', orgId, serviceId],
+    queryFn: () => serviceApi.get(orgId, serviceId),
+  });
   const status = useQuery({
     queryKey: ['integration', orgId, serviceId],
     queryFn: () => integrationApi.status(orgId, serviceId),
@@ -123,45 +133,33 @@ export function ServicePage() {
 
   return (
     <>
-      <PageHeader
-        above={
-          <Link component={RouterLink} to={`/o/${orgId}/projects/${s.projectId}`} variant="body2">
-            {s.projectName}
-          </Link>
-        }
-        title={
-          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-            {s.name}
-            {archived && <Chip size="small" color="warning" variant="outlined" label="Archived" />}
-          </Box>
-        }
-        description={[s.technology ? technologyLabel[s.technology] : null, s.description].filter(Boolean).join(' — ') || undefined}
-        actions={
-          canManage && (
-            <>
-              {!archived &&
-                (disabled ? (
-                  <Button variant="outlined" disabled={busy} onClick={() => run(() => integrationApi.enable(orgId, serviceId))}>
-                    Turn ingestion on
-                  </Button>
-                ) : (
-                  <Button variant="outlined" disabled={busy} onClick={() => setConfirm('disable')}>
-                    Turn ingestion off
-                  </Button>
-                ))}
-              {archived ? (
-                <Button variant="outlined" onClick={() => setConfirm('restore')}>
-                  Restore service
-                </Button>
-              ) : (
-                <Button color="error" onClick={() => setConfirm('archive')}>
-                  Archive
-                </Button>
-              )}
-            </>
-          )
-        }
-      />
+      {canManage && (
+        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mb: 2, flexWrap: 'wrap' }}>
+          {!archived &&
+            (disabled ? (
+              <Button
+                variant="outlined"
+                disabled={busy}
+                onClick={() => run(() => integrationApi.enable(orgId, serviceId))}
+              >
+                Turn ingestion on
+              </Button>
+            ) : (
+              <Button variant="outlined" disabled={busy} onClick={() => setConfirm('disable')}>
+                Turn ingestion off
+              </Button>
+            ))}
+          {archived ? (
+            <Button variant="outlined" onClick={() => setConfirm('restore')}>
+              Restore service
+            </Button>
+          ) : (
+            <Button color="error" onClick={() => setConfirm('archive')}>
+              Archive
+            </Button>
+          )}
+        </Box>
+      )}
 
       {actionError !== null && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setActionError(null)}>
@@ -177,7 +175,10 @@ export function ServicePage() {
               {st.nextStep}
             </Typography>
           </Box>
-          <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 3, rowGap: 0.5 }}>
+          <Box
+            component="dl"
+            sx={{ m: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 3, rowGap: 0.5 }}
+          >
             <Typography component="dt" variant="caption">
               Method
             </Typography>
@@ -212,7 +213,10 @@ export function ServicePage() {
       </Panel>
 
       {!archived && (
-        <Panel title={connected ? 'Connection guide' : `Connect ${s.name}`} description="Four steps. This page updates by itself when data arrives.">
+        <Panel
+          title={connected ? 'Connection guide' : `Connect ${s.name}`}
+          description="Four steps. This page updates by itself when data arrives."
+        >
           <Step n={1} title="Choose how the service sends data" done={!!chosen}>
             <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' } }}>
               {METHODS.map((m) => {
@@ -255,8 +259,8 @@ export function ServicePage() {
               <IssuedKeyNotice issued={issued} />
             ) : st.usableKeys > 0 ? (
               <Typography variant="body2">
-                This service can use {st.usableKeys === 1 ? 'one active key' : `${st.usableKeys} active keys`}. Use the key you
-                saved when it was created; if it is lost, create a new one and revoke the old one on the{' '}
+                This service can use {st.usableKeys === 1 ? 'one active key' : `${st.usableKeys} active keys`}. Use the
+                key you saved when it was created; if it is lost, create a new one and revoke the old one on the{' '}
                 <Link component={RouterLink} to={`/o/${orgId}/projects/${s.projectId}`}>
                   project page
                 </Link>

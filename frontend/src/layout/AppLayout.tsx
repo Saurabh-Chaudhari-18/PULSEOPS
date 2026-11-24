@@ -46,6 +46,10 @@ function navGroups(orgId: string): NavGroup[] {
   const base = `/o/${orgId}`;
   return [
     {
+      label: 'Observe',
+      items: [{ label: 'Overview', to: `${base}/overview`, permission: P.telemetryRead }],
+    },
+    {
       label: 'Set up',
       items: [
         { label: 'Projects and services', to: `${base}/projects`, permission: P.projectRead },
@@ -60,45 +64,58 @@ function Sidebar({ orgId, can, onNavigate }: { orgId: string; can: (p: string) =
     <Box
       component="nav"
       aria-label="Main"
-      sx={{ width: SIDEBAR, height: '100%', bgcolor: tokens.ink, color: tokens.sidebarText, display: 'flex', flexDirection: 'column' }}
+      sx={{
+        width: SIDEBAR,
+        height: '100%',
+        bgcolor: tokens.ink,
+        color: tokens.sidebarText,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2.25, height: 60 }}>
         <PulseMark />
-        <Typography sx={{ color: '#FFFFFF', fontWeight: 600, fontSize: 16, letterSpacing: '-0.01em' }}>PulseOps</Typography>
+        <Typography sx={{ color: '#FFFFFF', fontWeight: 600, fontSize: 16, letterSpacing: '-0.01em' }}>
+          PulseOps
+        </Typography>
       </Box>
       <Box sx={{ flex: 1, overflowY: 'auto', px: 1.25, pt: 1 }}>
-        {navGroups(orgId).map((group) => (
-          <Box key={group.label} sx={{ mb: 2 }}>
-            <Typography sx={{ px: 1.25, pb: 0.75, fontSize: 12, color: '#8592A8', fontWeight: 500 }}>{group.label}</Typography>
-            {group.items
-              .filter((item) => !item.permission || can(item.permission))
-              .map((item) => (
-                <Box
-                  key={item.to}
-                  component={NavLink}
-                  to={item.to}
-                  onClick={onNavigate}
-                  sx={{
-                    display: 'block',
-                    px: 1.25,
-                    py: 0.9,
-                    borderRadius: 1,
-                    color: tokens.sidebarText,
-                    textDecoration: 'none',
-                    fontSize: 14,
-                    '&:hover': { bgcolor: '#1F2A40', color: '#FFFFFF' },
-                    '&.active': {
-                      bgcolor: tokens.sidebarActive,
-                      color: '#FFFFFF',
-                      boxShadow: `inset 3px 0 0 ${tokens.pulse}`,
-                    },
-                  }}
-                >
-                  {item.label}
-                </Box>
-              ))}
-          </Box>
-        ))}
+        {navGroups(orgId)
+          .filter((group) => group.items.some((item) => !item.permission || can(item.permission)))
+          .map((group) => (
+            <Box key={group.label} sx={{ mb: 2 }}>
+              <Typography sx={{ px: 1.25, pb: 0.75, fontSize: 12, color: '#8592A8', fontWeight: 500 }}>
+                {group.label}
+              </Typography>
+              {group.items
+                .filter((item) => !item.permission || can(item.permission))
+                .map((item) => (
+                  <Box
+                    key={item.to}
+                    component={NavLink}
+                    to={item.to}
+                    onClick={onNavigate}
+                    sx={{
+                      display: 'block',
+                      px: 1.25,
+                      py: 0.9,
+                      borderRadius: 1,
+                      color: tokens.sidebarText,
+                      textDecoration: 'none',
+                      fontSize: 14,
+                      '&:hover': { bgcolor: '#1F2A40', color: '#FFFFFF' },
+                      '&.active': {
+                        bgcolor: tokens.sidebarActive,
+                        color: '#FFFFFF',
+                        boxShadow: `inset 3px 0 0 ${tokens.pulse}`,
+                      },
+                    }}
+                  >
+                    {item.label}
+                  </Box>
+                ))}
+            </Box>
+          ))}
       </Box>
     </Box>
   );
@@ -221,7 +238,16 @@ export function AppLayout() {
             </Typography>
             <Box sx={{ flex: 1 }} />
             <IconButton onClick={(e) => setUserMenu(e.currentTarget)} aria-label="Account menu">
-              <Avatar sx={{ width: 32, height: 32, fontSize: 13, bgcolor: tokens.cobaltSoft, color: tokens.cobalt, fontWeight: 600 }}>
+              <Avatar
+                sx={{
+                  width: 32,
+                  height: 32,
+                  fontSize: 13,
+                  bgcolor: tokens.cobaltSoft,
+                  color: tokens.cobalt,
+                  fontWeight: 600,
+                }}
+              >
                 {initials}
               </Avatar>
             </IconButton>
@@ -234,7 +260,7 @@ export function AppLayout() {
                 selected={o.id === orgId}
                 onClick={() => {
                   setOrgMenu(null);
-                  navigate(`/o/${o.id}/projects`);
+                  navigate(`/o/${o.id}`);
                 }}
               >
                 <ListItemIcon>{o.id === orgId && <CheckIcon fontSize="small" />}</ListItemIcon>
@@ -280,7 +306,10 @@ export function AppLayout() {
             </MenuItem>
           </Menu>
 
-          <Box component="main" sx={{ flex: 1, px: { xs: 2, md: 4 }, py: { xs: 2.5, md: 4 }, maxWidth: 1240, width: '100%' }}>
+          <Box
+            component="main"
+            sx={{ flex: 1, px: { xs: 2, md: 4 }, py: { xs: 2.5, md: 4 }, maxWidth: 1240, width: '100%' }}
+          >
             <Outlet />
           </Box>
         </Box>

@@ -86,20 +86,30 @@ describe('api client', () => {
 
   it('turns backend errors into ApiError with field errors', async () => {
     handler = () =>
-      json(400, { code: 'VALIDATION_FAILED', message: 'Invalid', fieldErrors: [{ field: 'name', message: 'must not be blank' }] });
+      json(400, {
+        code: 'VALIDATION_FAILED',
+        message: 'Invalid',
+        fieldErrors: [{ field: 'name', message: 'must not be blank' }],
+      });
     const error = (await api.post('/organizations', {}).catch((e) => e)) as ApiError;
     expect(error.status).toBe(400);
     expect(error.fieldMessage('name')).toBe('must not be blank');
   });
 
   it('reports an unreachable server as NETWORK, not as signed out', async () => {
-    configureClient({ fetch: (async () => { throw new TypeError('Failed to fetch'); }) as typeof fetch });
+    configureClient({
+      fetch: (async () => {
+        throw new TypeError('Failed to fetch');
+      }) as typeof fetch,
+    });
     await expect(refreshSession()).rejects.toMatchObject({ code: 'NETWORK' });
   });
 
   it('returns undefined for 204 and adds query parameters, skipping empty ones', async () => {
     handler = () => new Response(null, { status: 204 });
-    await expect(api.post('/x', undefined, { auth: false, query: { a: 1, b: '', c: undefined, d: 'x y' } })).resolves.toBeUndefined();
+    await expect(
+      api.post('/x', undefined, { auth: false, query: { a: 1, b: '', c: undefined, d: 'x y' } }),
+    ).resolves.toBeUndefined();
     expect(calls[0].url).toBe('/api/v1/x?a=1&d=x+y');
   });
 });

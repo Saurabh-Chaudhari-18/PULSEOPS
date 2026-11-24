@@ -77,7 +77,12 @@ export function CreateProjectDialog({
             autoFocus
             required
           />
-          <TextField select label="Environment" value={environment} onChange={(e) => setEnvironment(e.target.value as Environment)}>
+          <TextField
+            select
+            label="Environment"
+            value={environment}
+            onChange={(e) => setEnvironment(e.target.value as Environment)}
+          >
             {(Object.keys(environmentLabel) as Environment[]).map((env) => (
               <MenuItem key={env} value={env}>
                 {environmentLabel[env]}
@@ -135,7 +140,13 @@ export function CreateServiceDialog({
     setBusy(true);
     form.clear();
     try {
-      const service = await serviceApi.create(orgId, projectId, name.trim(), technology, description.trim() || undefined);
+      const service = await serviceApi.create(
+        orgId,
+        projectId,
+        name.trim(),
+        technology,
+        description.trim() || undefined,
+      );
       setName('');
       setDescription('');
       onCreated(service);
@@ -165,7 +176,12 @@ export function CreateServiceDialog({
             autoFocus
             required
           />
-          <TextField select label="Technology" value={technology} onChange={(e) => setTechnology(e.target.value as Technology)}>
+          <TextField
+            select
+            label="Technology"
+            value={technology}
+            onChange={(e) => setTechnology(e.target.value as Technology)}
+          >
             {(Object.keys(technologyLabel) as Technology[]).map((t) => (
               <MenuItem key={t} value={t}>
                 {technologyLabel[t]}

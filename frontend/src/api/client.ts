@@ -160,7 +160,12 @@ function withQuery(path: string, query?: RequestOptions['query']): string {
   return text ? `${path}${path.includes('?') ? '&' : '?'}${text}` : path;
 }
 
-export async function request<T>(method: string, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
+export async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  options: RequestOptions = {},
+): Promise<T> {
   const auth = options.auth ?? true;
   const url = withQuery(path, options.query);
 

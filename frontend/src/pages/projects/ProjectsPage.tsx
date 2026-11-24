@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   Box,
   Button,
@@ -40,7 +40,7 @@ export function ProjectsPage() {
   const projects = useQuery({
     queryKey: ['projects', orgId, status, search.trim()],
     queryFn: () => projectApi.list(orgId, status, search.trim() || undefined),
-    placeholderData: (previous) => previous,
+    placeholderData: keepPreviousData,
   });
   const canManage = can(P.projectManage);
 
@@ -130,7 +130,11 @@ export function ProjectsPage() {
                   return (
                     <TableRow key={project.id} hover>
                       <TableCell>
-                        <Link component={RouterLink} to={`/o/${orgId}/projects/${project.id}`} sx={{ fontWeight: 600, fontSize: 14 }}>
+                        <Link
+                          component={RouterLink}
+                          to={`/o/${orgId}/projects/${project.id}`}
+                          sx={{ fontWeight: 600, fontSize: 14 }}
+                        >
                           {project.name}
                         </Link>
                         {project.description && (
@@ -149,7 +153,10 @@ export function ProjectsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Signal health={health} label={all === 0 ? 'No services yet' : `${connected} of ${all} connected`} />
+                        <Signal
+                          health={health}
+                          label={all === 0 ? 'No services yet' : `${connected} of ${all} connected`}
+                        />
                       </TableCell>
                       <TableCell>{formatDate(project.createdAt)}</TableCell>
                     </TableRow>

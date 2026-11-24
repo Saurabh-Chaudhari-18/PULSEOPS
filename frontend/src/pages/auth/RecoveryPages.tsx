@@ -32,8 +32,8 @@ export function ForgotPasswordPage() {
     return (
       <AuthLayout title="Check your email">
         <Typography>
-          If an account exists for <strong>{email.trim()}</strong>, a link to reset the password is on its way. It works for
-          30 minutes.
+          If an account exists for <strong>{email.trim()}</strong>, a link to reset the password is on its way. It works
+          for 30 minutes.
         </Typography>
         <Button component={RouterLink} to="/login" variant="contained" sx={{ mt: 3 }}>
           Back to sign in
@@ -100,7 +100,9 @@ export function ResetPasswordPage() {
   if (!token) {
     return (
       <AuthLayout title="Link incomplete">
-        <Typography>This reset link is missing its token. Open the link from the email again, or request a new one.</Typography>
+        <Typography>
+          This reset link is missing its token. Open the link from the email again, or request a new one.
+        </Typography>
         <Button component={RouterLink} to="/forgot-password" variant="contained" sx={{ mt: 3 }}>
           Request a new link
         </Button>

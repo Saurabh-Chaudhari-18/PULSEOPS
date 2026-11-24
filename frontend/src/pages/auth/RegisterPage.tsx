@@ -43,8 +43,8 @@ export function RegisterPage() {
     return (
       <AuthLayout title="Check your email">
         <Typography>
-          If <strong>{email.trim()}</strong> can be registered, a verification link is on its way. Open it to activate your
-          account, then sign in.
+          If <strong>{email.trim()}</strong> can be registered, a verification link is on its way. Open it to activate
+          your account, then sign in.
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           Running PulseOps locally? In development mode the link is written to the backend log instead of being emailed.

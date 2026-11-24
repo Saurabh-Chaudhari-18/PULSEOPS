@@ -47,7 +47,10 @@ export function AccountPage() {
     try {
       await userApi.changePassword(current, next);
       endSession();
-      navigate('/login', { replace: true, state: { notice: 'Password changed. Sign in again on each device.', email: user?.email } });
+      navigate('/login', {
+        replace: true,
+        state: { notice: 'Password changed. Sign in again on each device.', email: user?.email },
+      });
     } catch (e) {
       password.setError(e);
     } finally {
@@ -79,7 +82,11 @@ export function AccountPage() {
               helperText={profile.field('fullName')}
             />
             <Box>
-              <Button type="submit" variant="contained" disabled={busy || !fullName.trim() || fullName.trim() === user?.fullName}>
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={busy || !fullName.trim() || fullName.trim() === user?.fullName}
+              >
                 Save name
               </Button>
             </Box>

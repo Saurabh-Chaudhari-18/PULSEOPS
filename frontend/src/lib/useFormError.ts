@@ -5,6 +5,7 @@ import { ApiError, errorMessage } from '../api/client';
 export function useFormError() {
   const [error, setError] = useState<unknown>(null);
   const field = (name: string) => (error instanceof ApiError ? error.fieldMessage(name) : undefined);
-  const general = error === null ? null : error instanceof ApiError && error.fieldErrors.length > 0 ? null : errorMessage(error);
+  const general =
+    error === null ? null : error instanceof ApiError && error.fieldErrors.length > 0 ? null : errorMessage(error);
   return { error, setError, field, general, clear: () => setError(null) };
 }
