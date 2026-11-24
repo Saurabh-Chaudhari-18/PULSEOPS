@@ -20,7 +20,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 | 9 | Application and API Monitoring | COMPLETED |
 | 10 | Database Monitoring | COMPLETED |
 | 11 | Logs and Distributed Traces | COMPLETED |
-| 12 | Python ML Service and Anomaly Detection | IMPLEMENTED — awaiting PC run |
+| 12 | Python ML Service and Anomaly Detection | COMPLETED |
 | 13 | Incident Correlation | NOT STARTED |
 | 14 | Root Cause Analysis and Recommendations | NOT STARTED |
 | 15 | Alerts and Notifications | NOT STARTED |
@@ -227,7 +227,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - A first run during heavy machine load (tests + backend restart on the 8 GB PC) showed ~39 s client spans and traces missing middle spans: the sample JVM was stalled and the agent dropped exports while PulseOps restarted. The explorer displayed it faithfully (orphan roots); a re-run once the machine was idle was normal.
 - Follow-up done: trace summaries gained `entryName` (first SERVER span) because the sample's self-generated traffic makes HTTP-client spans (named only `POST`/`GET`) the roots; `name` search matches either. Verified on PostgreSQL.
 
-## Phase 12 — Python ML Service and Anomaly Detection — IMPLEMENTED, awaiting PC run (2026-11-23)
+## Phase 12 — Python ML Service and Anomaly Detection — COMPLETED (2026-11-24)
 
 **Completed (code):**
 - `ml-service` (FastAPI, numpy, pydantic; ADR-023): robust median/MAD detection with per-metric practical-significance guards, severities and explanations; `POST /v1/detect` (shared secret, constant-time compare, 4 MiB body limit, ≤ 200 series × 1440 points, strict validation, docs endpoints disabled); refuses to start without a ≥ 32-character secret unless explicitly in insecure dev mode; Dockerfile (non-root); README with rules.
@@ -245,4 +245,6 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Live acceptance (2026-11-24, sample + Java agent + real ML service on Windows):** after the detection status gained skip reporting, the `slow-db` fault produced exactly four CRITICAL anomalies — `db_duration` (1514 ms vs usual ~1 ms), `response_latency` for `GET /api/orders/{id}` (1563 ms vs 16 ms) and `GET /api/orders/report` (1542 ms vs 39 ms), and the service-level p95 (1563 ms vs 32 ms) — while unaffected endpoints, error rates and traffic stayed quiet; the new `PUT /admin/chaos` series were reported as "insufficient history" instead of judged; a repeat run merged into the same anomalies (`occurrences` 2). Reason formatting now keeps a decimal below 10 ms ("usual 0.7 ms").
 
-**Pending on the PC:** `pytest` (27 tests), the backend suite (250), and auto-resolution after the fault is switched off.
+**Final PC results (2026-11-24):** backend **250/250 passed**; ML service **30/30 passed** on Windows (Python 3.12, FastAPI 0.165; one Starlette deprecation warning, KNOWN_ISSUES #34). After the fault was switched off detection reported 0 findings and the four anomalies moved to `resolved` 10 minutes after they were last seen (occurrences 6–7 while the fault lasted).
+
+**Next:** Phase 13 (incident correlation and root-cause analysis).
