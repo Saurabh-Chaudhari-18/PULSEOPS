@@ -5,7 +5,7 @@ Optimized for an 8 GB RAM machine. Docker is **optional** for local development 
 ## Prerequisites
 
 - Java 21 (JDK), Maven 3.9+
-- Node.js 20+ / npm 10+
+- Node.js 22.12+ (or 20.19+) / npm 10+ — Vite 7 refuses older versions; use the current LTS
 - Python 3.11+
 - PostgreSQL 15/16 (native install, or Docker if you prefer)
 

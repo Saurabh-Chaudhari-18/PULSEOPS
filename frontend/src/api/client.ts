@@ -110,7 +110,9 @@ async function send(path: string, init: RequestInit): Promise<Response> {
  */
 function acrossTabs<T>(action: () => Promise<T>): Promise<T> {
   const locks = (globalThis.navigator as Navigator | undefined)?.locks;
-  return locks ? locks.request('pulseops-session-refresh', action) : action();
+  if (!locks) return action();
+  // request() resolves to the callback's settled value; its typings wrap it in a second Promise.
+  return locks.request('pulseops-session-refresh', action) as unknown as Promise<T>;
 }
 
 /**
