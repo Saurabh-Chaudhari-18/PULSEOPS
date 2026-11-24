@@ -243,4 +243,6 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **PC run 1 (2026-11-24):** backend **249/249 passed** (incl. `AnomalyUnitTest` and the journey's detection step against the stub ML service). Python on Windows (3.12, FastAPI 0.165): 24/25 — the oversize-body test used a body below its own 10 KB test limit. Review of that test exposed a real gap: the limit only checked `Content-Length`, so a chunked request had no limit. Fixed with a pure-ASGI `BodyLimitMiddleware` that counts streamed bytes and replays the buffered body (3 ASGI-level tests run here; a chunked-request API test added).
 
-**Pending on the PC:** re-run `pytest` (26 tests) and live acceptance with the real ML service and the sample's fault presets.
+**Live acceptance (2026-11-24, sample + Java agent + real ML service on Windows):** after the detection status gained skip reporting, the `slow-db` fault produced exactly four CRITICAL anomalies — `db_duration` (1514 ms vs usual ~1 ms), `response_latency` for `GET /api/orders/{id}` (1563 ms vs 16 ms) and `GET /api/orders/report` (1542 ms vs 39 ms), and the service-level p95 (1563 ms vs 32 ms) — while unaffected endpoints, error rates and traffic stayed quiet; the new `PUT /admin/chaos` series were reported as "insufficient history" instead of judged; a repeat run merged into the same anomalies (`occurrences` 2). Reason formatting now keeps a decimal below 10 ms ("usual 0.7 ms").
+
+**Pending on the PC:** `pytest` (27 tests), the backend suite (250), and auto-resolution after the fault is switched off.

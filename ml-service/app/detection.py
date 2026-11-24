@@ -180,7 +180,8 @@ def _fmt(metric: Metric, value: float) -> str:
         return f"{value * 100:.1f}%"
     if metric == Metric.REQUEST_RATE:
         return f"{value:.2f} req/s"
-    return f"{value:.0f} ms"
+    # Sub-10 ms values keep a decimal so "usual 0.7 ms (2087x)" reads consistently.
+    return f"{value:.1f} ms" if abs(value) < 10 else f"{value:.0f} ms"
 
 
 _LABEL = {

@@ -105,3 +105,9 @@ def test_flat_baseline_does_not_explode_the_score():
 def test_non_finite_values_are_ignored():
     points = [Point(float("nan"), 50)] * 3 + noisy(60, 12, 4) + [Point(float("inf"), 50)] + [Point(12, 50)] * 5
     assert detect(Metric.RESPONSE_LATENCY, points) is None
+
+
+def test_small_baselines_keep_a_decimal_in_the_reason():
+    result = detect(Metric.DB_DURATION, [Point(0.7, 30)] * 60 + [Point(1514, 30)] * 5)
+    assert result.reason.startswith("Database p95 1514 ms is far above its usual 0.7 ms (2162.9x)")
+
