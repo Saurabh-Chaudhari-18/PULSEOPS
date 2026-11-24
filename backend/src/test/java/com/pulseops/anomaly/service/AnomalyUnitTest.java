@@ -76,4 +76,13 @@ class AnomalyUnitTest {
         assertThatThrownBy(() -> AnomalyService.severityRank("urgent")).isInstanceOf(ApiException.class);
         assertThat(AnomalyDetectionJob.truncate("x".repeat(400))).hasSize(300);
     }
+
+    @Test
+    void skipReasonsAreGroupedIntoCategories() {
+        assertThat(AnomalyDetectionJob.skipCategory("insufficient history: 12 usable baseline points, 30 needed"))
+                .isEqualTo("insufficient history");
+        assertThat(AnomalyDetectionJob.skipCategory("only 1 usable points in the evaluation window, 3 needed"))
+                .isEqualTo("only N usable points in the evaluation window, N needed");
+        assertThat(AnomalyDetectionJob.skipCategory(null)).isEqualTo("unspecified");
+    }
 }

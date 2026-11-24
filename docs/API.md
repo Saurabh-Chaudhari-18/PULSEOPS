@@ -237,7 +237,7 @@ Under `/api/v1/organizations/{orgId}/anomalies`. Produced every minute by the de
 | `GET ?from&to&status&serviceId&minSeverity&cursor&limit` | `telemetry.read` | Anomalies that were active in the window, newest detection first, keyset-paginated. `status` = `active` (open + linked, default), `open`, `linked`, `resolved`, `dismissed`, `all`; `minSeverity` = low…critical. Each: metric (`request_rate`, `response_latency`, `error_rate`, `db_duration`, `connection_utilization`), scope, type (`spike`/`drop`), severity, observed vs expected, score (robust z), human-readable `reason`, detected/last-seen times, window, occurrences, status, evidence (detector, spread, baseline size, sensitivity) |
 | `GET /{id}` | `telemetry.read` | One anomaly |
 | `POST /{id}/dismiss` | `incident.manage` | Marks an active anomaly as a false positive (audited `anomaly.dismissed`); 409 `ANOMALY_NOT_ACTIVE` otherwise |
-| `GET /detection-status` | `telemetry.read` | Job health (no tenant data): enabled, last run/success, last error (e.g. ML service unavailable), services/series evaluated, findings |
+| `GET /detection-status` | `telemetry.read` | Job health (no tenant data): enabled, last run/success, last error (e.g. ML service unavailable), services/series evaluated, series not judged with counts per reason (e.g. `insufficient history`), findings |
 
 ## ML service (internal)
 

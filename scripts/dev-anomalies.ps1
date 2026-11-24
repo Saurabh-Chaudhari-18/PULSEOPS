@@ -39,7 +39,11 @@ $st = Invoke-Api GET "$api/detection-status" -Token $token
 Write-Host ""
 Write-Host "Detection job" -ForegroundColor Cyan
 Write-Host ("  enabled {0}   last run {1}   last success {2}" -f $st.enabled, $st.lastRunAt, $st.lastSuccessAt)
-Write-Host ("  services {0}   series {1}   findings {2}" -f $st.servicesEvaluated, $st.seriesEvaluated, $st.anomaliesFound)
+Write-Host ("  services {0}   series {1}   not judged {2}   findings {3}" -f `
+        $st.servicesEvaluated, $st.seriesEvaluated, $st.seriesSkipped, $st.anomaliesFound)
+if ($st.skipReasons) {
+    foreach ($p in $st.skipReasons.PSObject.Properties) { Write-Host ("    not judged: {0} x {1}" -f $p.Value, $p.Name) }
+}
 if ($st.lastError) { Write-Host "  last error: $($st.lastError)" -ForegroundColor Yellow }
 
 $from = [DateTime]::UtcNow.AddMinutes(-$Minutes).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")

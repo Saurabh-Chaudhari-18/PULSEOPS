@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -65,16 +66,21 @@ public class AnomalyDetectionJob {
         this.settings = props.ml();
     }
 
-    /** Outcome of the latest run; contains no tenant data. */
+    /**
+     * Outcome of the latest run; contains no tenant data. {@code skipReasons} counts series the
+     * ML service declined to judge, by reason (e.g. "insufficient history"), so "no findings"
+     * can be told apart from "nothing could be judged yet".
+     */
     public record Status(boolean enabled, Instant lastRunAt, Instant lastSuccessAt, String lastError,
-                         int servicesEvaluated, int seriesEvaluated, int anomaliesFound) {
-        static final Status NEVER_RUN = new Status(true, null, null, null, 0, 0, 0);
+                         int servicesEvaluated, int seriesEvaluated, int seriesSkipped, Map<String, Integer> skipReasons,
+                         int anomaliesFound) {
+        static final Status NEVER_RUN = new Status(true, null, null, null, 0, 0, 0, Map.of(), 0);
     }
 
     public Status status() {
         Status s = status.get();
         return new Status(settings.detectionEnabled(), s.lastRunAt(), s.lastSuccessAt(), s.lastError(),
-                s.servicesEvaluated(), s.seriesEvaluated(), s.anomaliesFound());
+                s.servicesEvaluated(), s.seriesEvaluated(), s.seriesSkipped(), s.skipReasons(), s.anomaliesFound());
     }
 
     @Scheduled(initialDelayString = "${pulseops.ml.detection-interval:60s}",
@@ -101,12 +107,13 @@ public class AnomalyDetectionJob {
         int services = 0;
         int series = 0;
         int found = 0;
+        Map<String, Integer> skips = new TreeMap<>();
         String error = null;
         try {
             Map<UUID, List<UUID>> byOrg = discover(asOf.minus(ACTIVE_WITHIN));
             for (Map.Entry<UUID, List<UUID>> org : byOrg.entrySet()) {
                 int[] counts = TenantContext.callInOrganization(org.getKey(),
-                        () -> processOrganization(org.getKey(), org.getValue(), from, end, now));
+                        () -> processOrganization(org.getKey(), org.getValue(), from, end, now, skips));
                 services += org.getValue().size();
                 series += counts[0];
                 found += counts[1];
@@ -119,8 +126,9 @@ public class AnomalyDetectionJob {
             log.error("Anomaly detection run failed", e);
         }
         Status previous = status.get();
+        int skipped = skips.values().stream().mapToInt(Integer::intValue).sum();
         Status next = new Status(settings.detectionEnabled(), now, error == null ? now : previous.lastSuccessAt(),
-                error, services, series, found);
+                error, services, series, skipped, Map.copyOf(skips), found);
         status.set(next);
         return next;
     }
@@ -144,7 +152,8 @@ public class AnomalyDetectionJob {
     }
 
     /** @return {series evaluated, anomalies found} */
-    int[] processOrganization(UUID orgId, List<UUID> serviceIds, Instant from, Instant to, Instant now) {
+    int[] processOrganization(UUID orgId, List<UUID> serviceIds, Instant from, Instant to, Instant now,
+                              Map<String, Integer> skips) {
         List<Instant> minutes = SeriesBuilder.minutes(from, to);
         Map<UUID, UUID> projects = new HashMap<>();
         List<Built> all = new ArrayList<>();
@@ -164,7 +173,13 @@ public class AnomalyDetectionJob {
             chunk.forEach(b -> refs.put(b.ref().key(), b.ref()));
             MlClient.DetectResponse response = ml.detect(new MlClient.DetectRequest(
                     chunk.stream().map(Built::series).toList(), settings.evaluationMinutes(), settings.sensitivity()));
-            if (response == null || response.anomalies() == null) {
+            if (response == null) {
+                continue;
+            }
+            if (response.skipped() != null) {
+                response.skipped().forEach(k -> skips.merge(skipCategory(k.reason()), 1, Integer::sum));
+            }
+            if (response.anomalies() == null) {
                 continue;
             }
             for (MlClient.Finding f : response.anomalies()) {
@@ -253,6 +268,19 @@ public class AnomalyDetectionJob {
                 orgId, projectId, ref.serviceId(), ref.metric(), ref.scope(), f.anomalyType(), f.severity(),
                 f.observed(), f.expected(), Math.max(0, f.score()), Timestamp.from(now), Timestamp.from(now),
                 Timestamp.from(f.windowStart()), Timestamp.from(f.windowEnd()), evidenceJson, f.reason()));
+    }
+
+    /**
+     * Groups skip reasons: text before a colon, numbers replaced by N, e.g.
+     * "insufficient history: 12 usable baseline points, 30 needed" -> "insufficient history".
+     */
+    static String skipCategory(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return "unspecified";
+        }
+        int colon = reason.indexOf(':');
+        String category = (colon > 0 ? reason.substring(0, colon) : reason).replaceAll("\\d+", "N");
+        return category.length() <= 80 ? category : category.substring(0, 80);
     }
 
     static String truncate(String scope) {
