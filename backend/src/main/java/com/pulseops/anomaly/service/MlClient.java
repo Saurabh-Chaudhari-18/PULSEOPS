@@ -24,7 +24,8 @@ public class MlClient {
 
     public MlClient(RestClient.Builder builder, PulseOpsProperties props) {
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
-                java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
+                java.net.http.HttpClient.newBuilder().version(java.net.http.HttpClient.Version.HTTP_1_1)
+                        .connectTimeout(Duration.ofSeconds(3)).build());
         factory.setReadTimeout(Duration.ofSeconds(20));
         this.http = builder.baseUrl(props.ml().baseUrl()).requestFactory(factory).build();
         this.secret = props.ml().sharedSecret() == null ? "" : props.ml().sharedSecret();
