@@ -1,7 +1,9 @@
 package com.pulseops;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -9,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,6 +23,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pulseops.common.tenancy.TenantContext;
 import com.pulseops.anomaly.service.AnomalyDetectionJob;
+import com.pulseops.incident.service.IncidentCorrelator;
 import com.pulseops.testsupport.OtlpTestData;
 import com.pulseops.testsupport.StubMl;
 import com.pulseops.testsupport.TestProperties;
@@ -63,6 +68,9 @@ class FullJourneyIntegrationTest {
     JdbcTemplate jdbc;
     @Autowired
     AnomalyDetectionJob detectionJob;
+
+    @Autowired
+    IncidentCorrelator correlator;
 
     /** Stand-in for the Python ML service: flags every service-level latency series. */
     static final StubMl STUB_ML = StubMl.start();
@@ -389,9 +397,32 @@ class FullJourneyIntegrationTest {
         assertThat(anomaly.get("severity").asText()).isEqualTo("high");
         assertThat(anomaly.get("reason").asText()).startsWith("p95 latency");
         assertThat(anomaly.get("evidence").get("detector").asText()).isEqualTo("stub");
+        assertThat(run.incidentsCreated()).as("a high anomaly opens an incident").isGreaterThanOrEqualTo(1);
         detectionJob.runOnce(Instant.now().plusSeconds(120));
         JsonNode merged = body(call(carol, get(orgApi + "/anomalies/" + anomaly.get("id").asText()), null, 200));
         assertThat(merged.get("occurrences").asInt()).as("repeat finding merges").isEqualTo(2);
+
+        // 10. Incident correlation (Phase 13): the finding opened one automatic incident; the
+        //     repeat finding merged into the same anomaly and did not create another.
+        JsonNode incidentsPage = body(call(carol, get(orgApi + "/incidents"), null, 200));
+        assertThat(incidentsPage.get("incidents")).hasSize(1);
+        JsonNode incident = incidentsPage.get("incidents").get(0);
+        String incidentPath = orgApi + "/incidents/" + incident.get("id").asText();
+        assertThat(incident.get("source").asText()).isEqualTo("automatic");
+        assertThat(incident.get("status").asText()).isEqualTo("open");
+        assertThat(incident.get("severity").asText()).isEqualTo("high");
+        assertThat(incident.get("anomalyCount").asInt()).isEqualTo(1);
+        assertThat(incident.get("title").asText()).isEqualTo("Latency increase on checkout");
+        JsonNode incidentDetail = body(call(carol, get(incidentPath), null, 200));
+        assertThat(incidentDetail.get("affectedServices").get(0).asText()).isEqualTo("checkout");
+        assertThat(incidentDetail.get("anomalies").get(0).get("id").asText()).isEqualTo(anomaly.get("id").asText());
+        assertThat(incidentDetail.get("timeline").get(0).get("type").asText()).isEqualTo("created");
+        assertThat(incidentDetail.get("timeline").get(1).get("type").asText()).isEqualTo("anomaly_linked");
+        assertThat(incidentDetail.get("evidence").get("from").isNull()).isFalse();
+        assertThat(body(call(carol, get(orgApi + "/incidents?minSeverity=critical"), null, 200)).get("incidents"))
+                .isEmpty();
+        call(carol, get(orgApi + "/incidents?status=gone"), null, 400);
+
         JsonNode dismissed = body(call(carol, post(orgApi + "/anomalies/" + anomaly.get("id").asText() + "/dismiss"),
                 null, 200));
         assertThat(dismissed.get("status").asText()).isEqualTo("dismissed");
@@ -402,11 +433,62 @@ class FullJourneyIntegrationTest {
         assertThat(body(call(carol, get(orgApi + "/anomalies/detection-status"), null, 200)).get("lastSuccessAt")
                 .isNull()).isFalse();
 
+        // With its only anomaly ended, the untouched automatic incident resolves itself.
+        IncidentCorrelator.Result correlation = TenantContext.callInOrganization(org, () -> correlator.correlate(org));
+        assertThat(correlation.incidentsRecovered()).isEqualTo(1);
+        JsonNode recovered = body(call(carol, get(incidentPath), null, 200)).get("incident");
+        assertThat(recovered.get("status").asText()).isEqualTo("resolved");
+        assertThat(recovered.get("resolutionNotes").asText()).startsWith("Automatically resolved");
+        assertThat(body(call(carol, get(orgApi + "/incidents"), null, 200)).get("incidents")).isEmpty();
+        assertThat(body(call(carol, get(orgApi + "/incidents?status=resolved"), null, 200)).get("incidents"))
+                .hasSize(1);
+
+        // Manual incident: validation, lifecycle, assignment, comments and the timeline.
+        String carolId = field(call(carol, get("/api/v1/users/me"), null, 200), "id");
+        call(carol, post(orgApi + "/incidents"), "{\"projectId\":\"" + projectId
+                + "\",\"title\":\"Checkout page blank\",\"severity\":\"sev1\"}", 400);
+        call(carol, post(orgApi + "/incidents"), "{\"projectId\":\"" + UUID.randomUUID()
+                + "\",\"title\":\"Checkout page blank\",\"severity\":\"high\"}", 404);
+        JsonNode manual = body(call(carol, post(orgApi + "/incidents"), "{\"projectId\":\"" + projectId
+                + "\",\"serviceId\":\"" + serviceId + "\",\"title\":\"Checkout page blank\",\"severity\":\"medium\"}",
+                201)).get("incident");
+        assertThat(manual.get("source").asText()).isEqualTo("manual");
+        assertThat(manual.get("createdBy").asText()).isEqualTo(carolId);
+        String manualPath = orgApi + "/incidents/" + manual.get("id").asText();
+        call(carol, patch(manualPath), "{\"status\":\"closed\"}", 409);
+        call(carol, patch(manualPath), "{\"assigneeId\":\"" + UUID.randomUUID() + "\"}", 400);
+        JsonNode acked = body(call(carol, patch(manualPath), "{\"status\":\"acknowledged\",\"severity\":\"critical\","
+                + "\"assigneeId\":\"" + carolId + "\"}", 200)).get("incident");
+        assertThat(acked.get("status").asText()).isEqualTo("acknowledged");
+        assertThat(acked.get("severity").asText()).isEqualTo("critical");
+        assertThat(acked.get("acknowledgedAt").isNull()).isFalse();
+        assertThat(acked.get("assigneeName").asText()).isEqualTo("IT User");
+        JsonNode comment = body(call(carol, post(manualPath + "/comments"), "{\"body\":\"Rolled back the release\"}",
+                201));
+        assertThat(comment.get("authorName").asText()).isEqualTo("IT User");
+        call(carol, delete(manualPath + "/comments/" + comment.get("id").asText()), null, 204);
+        call(carol, delete(manualPath + "/comments/" + comment.get("id").asText()), null, 404);
+        JsonNode done = body(call(carol, patch(manualPath),
+                "{\"status\":\"resolved\",\"resolutionNotes\":\"Release rolled back\"}", 200));
+        assertThat(done.get("incident").get("resolvedAt").isNull()).isFalse();
+        assertThat(done.get("incident").get("resolutionNotes").asText()).isEqualTo("Release rolled back");
+        assertThat(done.get("comments")).isEmpty();
+        List<String> types = new ArrayList<>();
+        done.get("timeline").forEach(e -> types.add(e.get("type").asText()));
+        assertThat(types).containsExactly("created", "status_changed", "severity_changed", "assigned", "comment_added",
+                "comment_deleted", "status_changed", "resolved_notes_set");
+        assertThat(done.get("timeline").get(1).get("actorName").asText()).isEqualTo("IT User");
+        assertThat(body(call(carol, patch(manualPath), "{\"status\":\"closed\"}", 200)).get("incident")
+                .get("closedAt").isNull()).isFalse();
+        call(carol, patch(manualPath), "{\"status\":\"open\"}", 409);
+
         call(carol, get(monitoring + "/summary?from=not-a-time"), null, 400);
         Session mallory = registerAndLogin("mallory-" + suffix + "@it.test");
         call(mallory, get(monitoring + "/summary"), null, 404);
         call(mallory, get("/api/v1/organizations/" + orgId + "/traces/" + OtlpTestData.TRACE_ID), null, 404);
         call(mallory, get("/api/v1/organizations/" + orgId + "/anomalies"), null, 404);
+        call(mallory, get("/api/v1/organizations/" + orgId + "/incidents"), null, 404);
+        call(mallory, get(incidentPath), null, 404);
     }
 
     @Test

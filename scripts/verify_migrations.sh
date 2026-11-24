@@ -278,6 +278,43 @@ DO $$ BEGIN
 END $$;
 COMMIT;
 
+-- V13: one active automatic incident per dedup key; correlation event types accepted.
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000a';
+INSERT INTO incidents (organization_id, project_id, title, severity, status, source, dedup_key)
+ VALUES ('20000000-0000-0000-0000-00000000000a','30000000-0000-0000-0000-000000000001','Latency increase on svc-a',
+         'high','open','automatic','auto:project:30000000-0000-0000-0000-000000000001');
+INSERT INTO incidents (organization_id, project_id, title, severity, status, source, dedup_key)
+ VALUES ('20000000-0000-0000-0000-00000000000a','30000000-0000-0000-0000-000000000001','duplicate',
+         'high','open','automatic','auto:project:30000000-0000-0000-0000-000000000001')
+ ON CONFLICT (organization_id, dedup_key) WHERE dedup_key IS NOT NULL AND status NOT IN ('resolved', 'closed') DO NOTHING;
+INSERT INTO incident_events (organization_id, incident_id, event_type, details)
+ SELECT organization_id, id, 'anomaly_linked', '{}' FROM incidents;
+INSERT INTO incident_events (organization_id, incident_id, event_type, details)
+ SELECT organization_id, id, 'anomalies_recovered', '{}' FROM incidents;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM incidents) <> 1 THEN RAISE EXCEPTION 'automatic incident dedup failed'; END IF;
+  BEGIN
+    INSERT INTO incident_events (organization_id, incident_id, event_type, details)
+     SELECT organization_id, id, 'exploded', '{}' FROM incidents;
+    RAISE EXCEPTION 'unknown incident event type accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+END $$;
+UPDATE incidents SET status = 'resolved', resolved_at = now();
+INSERT INTO incidents (organization_id, project_id, title, severity, status, source, dedup_key)
+ VALUES ('20000000-0000-0000-0000-00000000000a','30000000-0000-0000-0000-000000000001','Again',
+         'medium','open','automatic','auto:project:30000000-0000-0000-0000-000000000001');
+COMMIT;
+BEGIN;
+SET LOCAL app.current_org_id = '20000000-0000-0000-0000-00000000000b';
+DO $$ BEGIN
+  IF (SELECT count(*) FROM incidents) + (SELECT count(*) FROM incident_events) <> 0 THEN
+    RAISE EXCEPTION 'RLS breach: incidents cross-tenant';
+  END IF;
+END $$;
+COMMIT;
+
 -- Seed catalog present.
 DO $$ BEGIN
   IF (SELECT count(*) FROM permissions) < 11 THEN RAISE EXCEPTION 'permissions seed missing'; END IF;

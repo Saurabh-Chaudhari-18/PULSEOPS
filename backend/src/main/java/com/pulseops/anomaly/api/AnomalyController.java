@@ -35,7 +35,7 @@ public class AnomalyController {
     }
 
     @GetMapping
-    @RequiresPermission(Permissions.TELEMETRY_READ)
+    @RequiresPermission(Permissions.INCIDENT_READ)
     public AnomalyPage list(@PathVariable UUID orgId, OrgAccess access,
                             @RequestParam(required = false) String from,
                             @RequestParam(required = false) String to,
@@ -49,13 +49,13 @@ public class AnomalyController {
     }
 
     @GetMapping("/detection-status")
-    @RequiresPermission(Permissions.TELEMETRY_READ)
+    @RequiresPermission(Permissions.INCIDENT_READ)
     public AnomalyDetectionJob.Status detectionStatus(@PathVariable UUID orgId, OrgAccess access) {
         return job.status();
     }
 
     @GetMapping("/{anomalyId}")
-    @RequiresPermission(Permissions.TELEMETRY_READ)
+    @RequiresPermission(Permissions.INCIDENT_READ)
     public AnomalyView get(@PathVariable UUID orgId, @PathVariable UUID anomalyId, OrgAccess access) {
         return anomalies.get(access, anomalyId);
     }

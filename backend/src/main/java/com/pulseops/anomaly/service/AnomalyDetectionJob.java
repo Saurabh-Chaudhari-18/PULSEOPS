@@ -23,6 +23,7 @@ import com.pulseops.anomaly.service.SeriesBuilder.RequestMinute;
 import com.pulseops.anomaly.service.SeriesBuilder.SeriesRef;
 import com.pulseops.common.config.PulseOpsProperties;
 import com.pulseops.common.tenancy.TenantContext;
+import com.pulseops.incident.service.IncidentCorrelator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,13 +52,15 @@ public class AnomalyDetectionJob {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
     private final MlClient ml;
+    private final IncidentCorrelator correlator;
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final PulseOpsProperties.Ml settings;
     private final AtomicReference<Status> status = new AtomicReference<>(Status.NEVER_RUN);
 
-    public AnomalyDetectionJob(JdbcTemplate jdbc, TransactionTemplate tx, MlClient ml, ObjectMapper objectMapper,
-                               Clock clock, PulseOpsProperties props) {
+    public AnomalyDetectionJob(JdbcTemplate jdbc, TransactionTemplate tx, MlClient ml, IncidentCorrelator correlator,
+                               ObjectMapper objectMapper, Clock clock, PulseOpsProperties props) {
+        this.correlator = correlator;
         this.jdbc = jdbc;
         this.tx = tx;
         this.ml = ml;
@@ -73,14 +76,15 @@ public class AnomalyDetectionJob {
      */
     public record Status(boolean enabled, Instant lastRunAt, Instant lastSuccessAt, String lastError,
                          int servicesEvaluated, int seriesEvaluated, int seriesSkipped, Map<String, Integer> skipReasons,
-                         int anomaliesFound) {
-        static final Status NEVER_RUN = new Status(true, null, null, null, 0, 0, 0, Map.of(), 0);
+                         int anomaliesFound, int incidentsCreated) {
+        static final Status NEVER_RUN = new Status(true, null, null, null, 0, 0, 0, Map.of(), 0, 0);
     }
 
     public Status status() {
         Status s = status.get();
         return new Status(settings.detectionEnabled(), s.lastRunAt(), s.lastSuccessAt(), s.lastError(),
-                s.servicesEvaluated(), s.seriesEvaluated(), s.seriesSkipped(), s.skipReasons(), s.anomaliesFound());
+                s.servicesEvaluated(), s.seriesEvaluated(), s.seriesSkipped(), s.skipReasons(), s.anomaliesFound(),
+                s.incidentsCreated());
     }
 
     @Scheduled(initialDelayString = "${pulseops.ml.detection-interval:60s}",
@@ -107,16 +111,21 @@ public class AnomalyDetectionJob {
         int services = 0;
         int series = 0;
         int found = 0;
+        int incidents = 0;
         Map<String, Integer> skips = new TreeMap<>();
         String error = null;
         try {
             Map<UUID, List<UUID>> byOrg = discover(asOf.minus(ACTIVE_WITHIN));
             for (Map.Entry<UUID, List<UUID>> org : byOrg.entrySet()) {
-                int[] counts = TenantContext.callInOrganization(org.getKey(),
-                        () -> processOrganization(org.getKey(), org.getValue(), from, end, now, skips));
+                int[] counts = TenantContext.callInOrganization(org.getKey(), () -> {
+                    int[] detected = processOrganization(org.getKey(), org.getValue(), from, end, now, skips);
+                    IncidentCorrelator.Result correlated = correlator.correlate(org.getKey());
+                    return new int[]{detected[0], detected[1], correlated.incidentsCreated()};
+                });
                 services += org.getValue().size();
                 series += counts[0];
                 found += counts[1];
+                incidents += counts[2];
             }
         } catch (RestClientException e) {
             error = "ML service unavailable: " + e.getMessage();
@@ -128,7 +137,7 @@ public class AnomalyDetectionJob {
         Status previous = status.get();
         int skipped = skips.values().stream().mapToInt(Integer::intValue).sum();
         Status next = new Status(settings.detectionEnabled(), now, error == null ? now : previous.lastSuccessAt(),
-                error, services, series, skipped, Map.copyOf(skips), found);
+                error, services, series, skipped, Map.copyOf(skips), found, incidents);
         status.set(next);
         return next;
     }

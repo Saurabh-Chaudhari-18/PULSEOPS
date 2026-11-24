@@ -55,9 +55,20 @@ Highlights:
 - `distributed_traces`: the global `UNIQUE (trace_id, span_id)` becomes `UNIQUE (organization_id, trace_id, span_id)` (ADR-018); span writes use `ON CONFLICT DO NOTHING`, so exporter retries are idempotent and tenants cannot block each other's IDs.
 - `metric_points`: one row per (service, metric name, canonical attribute key, minute bucket) with `sample_count`, `value_sum`, `value_min`, `value_max`, `value_last`; kind ∈ gauge/sum/histogram/summary. Writes merge with an upsert (counts and sums add, min/max widen, last is replaced when present). FORCE RLS `tenant_isolation`; included in `data_retention_policies`.
 
+## V12 — anomaly detection
+
+- `integration_connections` gains a SELECT-only policy that applies only while the transaction-local setting `app.discovery = 'on'` is set; the detection job uses it to find services with recent telemetry across tenants, then works per tenant under normal RLS.
+- `anomalies` gains `scope` (`service` or an endpoint), `reason`, `occurrences`, `last_seen_at`, `resolved_at` and status `resolved`; the partial unique index `anomalies_active_uq` keeps one active (`open`/`linked`) anomaly per service × metric × scope so repeats merge.
+
+## V13 — incident correlation
+
+- `incident_events.event_type` also accepts `anomaly_linked`, `anomalies_recovered`, `comment_deleted`, `resolved_notes_set` and `updated`.
+- Indexes for correlation and incident lists: `incident_anomalies (anomaly_id)`, `incidents (project_id, status)`, `anomalies (project_id, status, detected_at DESC)`.
+- Automatic incidents rely on V5's `incidents_active_dedup_uq` (one active incident per organization × dedup key).
+
 ## Verification
 
-`scripts/verify_migrations.sh` recreates a scratch DB, applies all migrations **as the non-superuser app role**, and asserts: seed catalog, cross-tenant write rejected, cross-tenant read empty, no-context fail-closed, user-scoped membership visibility, no joining foreign organizations via user context, removed members losing visibility. Run it after every schema change. Includes V10 checks (credential row visible only with its hash, setting cleared at commit, no writes via hash context, histogram addition) and V11 checks (per-tenant span uniqueness and retry idempotence, metric upsert arithmetic, `metric_points` isolation). Migrations are applied in numeric version order like Flyway. Last run: 2026-11-21, PostgreSQL 16.15, V1–V11 — PASS.
+`scripts/verify_migrations.sh` recreates a scratch DB, applies all migrations **as the non-superuser app role**, and asserts: seed catalog, cross-tenant write rejected, cross-tenant read empty, no-context fail-closed, user-scoped membership visibility, no joining foreign organizations via user context, removed members losing visibility. Run it after every schema change. Includes V10 checks (credential row visible only with its hash, setting cleared at commit, no writes via hash context, histogram addition) and V11 checks (per-tenant span uniqueness and retry idempotence, metric upsert arithmetic, `metric_points` isolation). Migrations are applied in numeric version order like Flyway. Includes V12 checks (discovery visibility, read-only and transaction-scoped; anomaly merge) and V13 checks (one active automatic incident per dedup key, new event types accepted and unknown ones rejected, incident isolation). Last run: 2026-11-24, PostgreSQL 16, V1–V13 — PASS.
 
 `TenantIsolationIntegrationTest` (backend) repeats the core checks through the real `TenantAwareDataSource` over a one-connection pool when `PULSEOPS_TEST_DB_URL` is set.
 

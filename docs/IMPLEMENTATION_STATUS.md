@@ -247,4 +247,21 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Final PC results (2026-11-24):** backend **250/250 passed**; ML service **30/30 passed** on Windows (Python 3.12, FastAPI 0.165; one Starlette deprecation warning, KNOWN_ISSUES #34). After the fault was switched off detection reported 0 findings and the four anomalies moved to `resolved` 10 minutes after they were last seen (occurrences 6–7 while the fault lasted).
 
-**Next:** Phase 13 (incident correlation and root-cause analysis).
+**Next:** Phase 13 (incident correlation).
+
+## Phase 13 — Incident Correlation and Incident Management — CODE COMPLETE, awaiting PC test run (2026-11-24)
+
+**Completed (code):**
+- `IncidentCorrelator` (ADR-025), run after every detection pass per organization: new anomalies join their project's active automatic incident or open one (≥ 2 anomalies, or one high/critical); severity raised to the worst anomaly; title/summary regenerated while nobody has acted; `anomalies_recovered` event and automatic resolution of untouched incidents once all linked anomalies have ended. Detection status reports `incidentsCreated`.
+- `IncidentRules` (problem family, title, summary, threshold) and `IncidentTransitions` (lifecycle) as pure classes.
+- `IncidentService` + `IncidentController`: list (status/severity/project/service filters, window overlap, cursors), detail with linked anomalies, timeline, comments and evidence gathered live (WARN+ logs, slowest and failing traces, slowest statements for the incident's period and services), manual creation, PATCH (status transitions, severity, assignment to active members, title/summary/notes) with a timeline event per change and audit, comments (author-only delete).
+- Anomaly endpoints now require `incident.read` / `incident.manage` (they are incident-intelligence data).
+- Migration **V13**: new incident event types; correlation and list indexes. Events use `clock_timestamp()` so the timeline keeps the order of steps within one transaction.
+- `scripts/dev-incidents.ps1` (list, detail with timeline and evidence, acknowledge/resolve).
+
+**Tests executed (cloud):**
+- ✅ `IncidentRulesTest` (5 tests, 27 checks: severities, threshold, titles for each family, summary ordering, all allowed and refused transitions) run with a JDK-only harness.
+- ✅ All 25 incident queries prepared and executed on PostgreSQL 16 as the app role under RLS: correlation (unlinked anomalies, dedup conflict returns no row, idempotent linking, refresh only while untouched, recovery detection only after the last link, automatic resolution), list filters/cursor, detail parts, manual creation, every lifecycle update (acknowledged/resolved/reopen/closed timestamps), comments (other user's delete refused).
+- ✅ `verify_migrations.sh` with V13 assertions (dedup, event types, isolation) — V1–V13 PASS.
+- ✅ Offline javac checks over 225 files.
+- ⏳ To run on the PC: `IncidentRulesTest`, `IncidentServiceParamsTest`, and journey step 10 (automatic incident from the stub's high finding, no duplicate on repeat, detail/timeline, self-resolution after the anomaly is dismissed, manual incident lifecycle, assignment, comments, 409/400/404 cases, cross-tenant 404).

@@ -234,10 +234,25 @@ Under `/api/v1/organizations/{orgId}/anomalies`. Produced every minute by the de
 
 | Endpoint | Permission | Returns |
 |---|---|---|
-| `GET ?from&to&status&serviceId&minSeverity&cursor&limit` | `telemetry.read` | Anomalies that were active in the window, newest detection first, keyset-paginated. `status` = `active` (open + linked, default), `open`, `linked`, `resolved`, `dismissed`, `all`; `minSeverity` = low…critical. Each: metric (`request_rate`, `response_latency`, `error_rate`, `db_duration`, `connection_utilization`), scope, type (`spike`/`drop`), severity, observed vs expected, score (robust z), human-readable `reason`, detected/last-seen times, window, occurrences, status, evidence (detector, spread, baseline size, sensitivity) |
-| `GET /{id}` | `telemetry.read` | One anomaly |
+| `GET ?from&to&status&serviceId&minSeverity&cursor&limit` | `incident.read` | Anomalies that were active in the window, newest detection first, keyset-paginated. `status` = `active` (open + linked, default), `open`, `linked`, `resolved`, `dismissed`, `all`; `minSeverity` = low…critical. Each: metric (`request_rate`, `response_latency`, `error_rate`, `db_duration`, `connection_utilization`), scope, type (`spike`/`drop`), severity, observed vs expected, score (robust z), human-readable `reason`, detected/last-seen times, window, occurrences, status, evidence (detector, spread, baseline size, sensitivity) |
+| `GET /{id}` | `incident.read` | One anomaly |
 | `POST /{id}/dismiss` | `incident.manage` | Marks an active anomaly as a false positive (audited `anomaly.dismissed`); 409 `ANOMALY_NOT_ACTIVE` otherwise |
-| `GET /detection-status` | `telemetry.read` | Job health (no tenant data): enabled, last run/success, last error (e.g. ML service unavailable), services/series evaluated, series not judged with counts per reason (e.g. `insufficient history`), findings |
+| `GET /detection-status` | `incident.read` | Job health (no tenant data): enabled, last run/success, last error (e.g. ML service unavailable), services/series evaluated, series not judged with counts per reason (e.g. `insufficient history`), findings |
+
+## Incidents (JWT)
+
+Under `/api/v1/organizations/{orgId}/incidents`. **Automatic** incidents are opened by correlation after each detection run (ADR-025): new anomalies of a project join that project's active automatic incident, or open one when there are at least two of them or one is high/critical. Severity follows the worst linked anomaly; title and summary are regenerated until a person acts on the incident. When every linked anomaly has ended (resolved or dismissed), an `anomalies_recovered` event is added and an incident still `open` is resolved automatically ("Automatically resolved: all related anomalies recovered."); incidents someone is working on stay as they are. **Manual** incidents are created by users.
+
+Lifecycle: `open` → `investigating` | `acknowledged` | `resolved`; `investigating` ↔ `acknowledged`; both → `resolved`; `resolved` → `open` (reopen) | `closed`; `closed` is final. Other moves return 409 `INVALID_TRANSITION`.
+
+| Endpoint | Permission | Returns |
+|---|---|---|
+| `GET ?from&to&status&minSeverity&projectId&serviceId&cursor&limit` | `incident.read` | Incidents active at any time in the window, newest first, keyset-paginated. `status` = `active` (open + investigating + acknowledged, default), one status, or `all`. `serviceId` matches the incident's service or any linked anomaly's service. Each: project/service names, title, summary, severity, status, source (`automatic`/`manual`), detected/acknowledged/resolved/closed times, assignee, creator, resolution notes, anomaly count |
+| `POST` `{projectId, serviceId?, title, summary?, severity}` | `incident.manage` | 201 + detail of a new manual incident (audited `incident.created`); 404 `PROJECT_NOT_FOUND`, 400 `SERVICE_NOT_IN_PROJECT` / `INVALID_SEVERITY` |
+| `GET /{id}` | `incident.read` | Detail: incident, affected services, linked anomalies, timeline (created, anomaly_linked, anomalies_recovered, status/severity changes, assignment, edits, comments; actor `null` = automatic), comments, and **evidence** gathered for the incident's period (from 5 minutes before the first anomaly's window until resolution or now) and affected services: up to 50 WARN+ logs, the 10 slowest traces, 10 failing traces, the 10 database statements with the highest p95 |
+| `PATCH /{id}` `{status?, severity?, assigneeId?, unassign?, title?, summary?, resolutionNotes?}` | `incident.manage` | Updated detail. Each change adds a timeline event with the user as actor and the update is audited `incident.updated`; the assignee must be an active member (400 `ASSIGNEE_NOT_MEMBER`). Acknowledged/resolved/closed times are set by the transitions; reopening clears resolution |
+| `POST /{id}/comments` `{body}` | `incident.manage` | 201 + comment |
+| `DELETE /{id}/comments/{commentId}` | `incident.manage` | 204; only the author's own comments (404 `COMMENT_NOT_FOUND` otherwise); a `comment_deleted` event stays in the timeline |
 
 ## ML service (internal)
 
