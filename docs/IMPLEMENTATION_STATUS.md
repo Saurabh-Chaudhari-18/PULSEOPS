@@ -272,7 +272,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 
 **Next:** frontend for Phases 1–13 (in parts), then Phase 14 (root-cause analysis).
 
-## Frontend part 1 — App shell, accounts, organizations, projects, services, onboarding — CODE COMPLETE, awaiting PC run (2026-11-24)
+## Frontend part 1 — App shell, accounts, organizations, projects, services, onboarding — COMPLETED (2026-11-24)
 
 **Completed (code), ADR-026:**
 - Foundation: Vite config (proxy via `PULSEOPS_BACKEND_URL`), design tokens/theme, bundled IBM Plex fonts, API client (in-memory token, shared refresh, retry once, typed errors with field messages), auth context (session restore on load, offline state), route guards, app layout (sidebar by permission, organization switcher, account menu, responsive drawer).
@@ -282,3 +282,7 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - ✅ TypeScript strict check of all sources against generated stubs of the libraries (React hooks and TanStack Query typed precisely, so result narrowing and data flow are checked; MUI/router props are not).
 - ✅ 10 unit tests (Vitest specs, run in Node with a shim): token sent; refresh-and-retry once; one shared refresh for concurrent 401s; failed refresh signs out and surfaces the original error; field errors; unreachable server reported as NETWORK without signing out; 204 handling and query building; time formatting; connection states; password rules.
 - ⏳ On the PC: `npm install`, `npm run typecheck`, `npm test`, `npm run dev`, and a walk through the screens against the running backend.
+
+**PC results (2026-11-24, Node 26.13, Windows):** `npm run typecheck` clean (after one fix: the Web Locks typing differs under TypeScript 5.9); `npm test` 10/10 on Vitest 4.1.12; `npm audit` 0 vulnerabilities (Vitest 3 advisories fixed by the upgrade, KNOWN_ISSUES #42); `npm run dev` on Vite 7.3.8 against the backend on 18080. Signed in with the demo account; the projects list, the Shop project (service, integration key) and the order-service connection page rendered with live data. Review found one inconsistency (green "Connected" in the list vs "no recent data" on the service page) — fixed (#43). Not yet walked through on the PC: registration, team and account screens.
+
+**Next:** frontend part 2 (overview, API and database monitoring, logs, traces, anomalies, incidents).

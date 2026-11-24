@@ -78,6 +78,14 @@ export interface ConnectionView {
   label: string;
 }
 
+/** The backend's freshness window: a connected service with nothing for 15 minutes is "not receiving". */
+export const FRESH_MINUTES = 15;
+
+export function isFresh(lastTelemetryAt: string | null | undefined, now: Date = new Date()): boolean {
+  if (!lastTelemetryAt) return false;
+  return now.getTime() - new Date(lastTelemetryAt).getTime() <= FRESH_MINUTES * 60_000;
+}
+
 /** How a service's connection reads at a glance; "connected" but silent for 15 min is a watch state. */
 export function connectionView(status: ConnectionStatus | null | undefined, receivingNow?: boolean): ConnectionView {
   switch (status) {

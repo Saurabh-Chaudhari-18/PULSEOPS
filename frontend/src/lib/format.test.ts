@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { connectionView, passwordProblem, timeAgo } from './format';
+import { connectionView, isFresh, passwordProblem, timeAgo } from './format';
 
 describe('timeAgo', () => {
   const now = new Date('2026-11-24T12:00:00Z');
@@ -30,5 +30,14 @@ describe('passwordProblem', () => {
     expect(passwordProblem('me@example.com', 'ME@example.com')).toMatch(/email/);
     expect(passwordProblem('a'.repeat(73) + 'b')).toMatch(/72/);
     expect(passwordProblem('correct horse battery')).toBeNull();
+  });
+});
+
+describe('isFresh', () => {
+  it('uses the 15-minute window the backend uses', () => {
+    const now = new Date('2026-11-24T12:00:00Z');
+    expect(isFresh('2026-11-24T11:50:00Z', now)).toBe(true);
+    expect(isFresh('2026-11-24T11:40:00Z', now)).toBe(false);
+    expect(isFresh(null, now)).toBe(false);
   });
 });

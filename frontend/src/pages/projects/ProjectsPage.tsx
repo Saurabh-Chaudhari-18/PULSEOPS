@@ -149,7 +149,7 @@ export function ProjectsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Signal health={health} label={all === 0 ? 'No services yet' : `${connected} of ${all}`} />
+                        <Signal health={health} label={all === 0 ? 'No services yet' : `${connected} of ${all} connected`} />
                       </TableCell>
                       <TableCell>{formatDate(project.createdAt)}</TableCell>
                     </TableRow>

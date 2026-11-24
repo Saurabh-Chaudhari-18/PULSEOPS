@@ -23,7 +23,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { Signal } from '../../components/Signal';
 import { P, useOrg } from '../../layout/OrgContext';
-import { connectionView, environmentLabel, formatDate, technologyLabel, timeAgo } from '../../lib/format';
+import { connectionView, environmentLabel, formatDate, isFresh, technologyLabel, timeAgo } from '../../lib/format';
 import { fonts } from '../../theme';
 import { IssueKeyDialog } from './KeyDialogs';
 import { CreateServiceDialog } from './ProjectDialogs';
@@ -152,7 +152,7 @@ export function ProjectPage() {
               </TableHead>
               <TableBody>
                 {serviceList.map((s) => {
-                  const view = connectionView(s.connection?.status);
+                  const view = connectionView(s.connection?.status, isFresh(s.connection?.lastTelemetryAt));
                   return (
                     <TableRow key={s.id} hover>
                       <TableCell>
