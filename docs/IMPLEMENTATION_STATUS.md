@@ -241,4 +241,6 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 - ✅ All 11 anomaly queries prepared and executed on PostgreSQL 16 (discovery, per-minute service/endpoint/database/pool series, upsert insert vs merge, severity filter, stale resolution, dismiss).
 - ✅ Offline javac checks over 216 files.
 
-**Pending on the PC:** `pytest` in `ml-service` (incl. HTTP layer), `AnomalyUnitTest`, the extended OTLP journey (job → stub ML service with the same JSON contract → anomaly stored, merged on repeat, dismissed, 409 on second dismiss, status filters, detection status, non-member 404), and live acceptance with the real ML service and the sample's fault presets.
+**PC run 1 (2026-11-24):** backend **249/249 passed** (incl. `AnomalyUnitTest` and the journey's detection step against the stub ML service). Python on Windows (3.12, FastAPI 0.165): 24/25 — the oversize-body test used a body below its own 10 KB test limit. Review of that test exposed a real gap: the limit only checked `Content-Length`, so a chunked request had no limit. Fixed with a pure-ASGI `BodyLimitMiddleware` that counts streamed bytes and replays the buffered body (3 ASGI-level tests run here; a chunked-request API test added).
+
+**Pending on the PC:** re-run `pytest` (26 tests) and live acceptance with the real ML service and the sample's fault presets.

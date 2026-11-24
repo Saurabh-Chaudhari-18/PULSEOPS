@@ -42,8 +42,20 @@ def test_invalid_and_oversized_bodies_are_rejected(client):
     headers = {"X-PulseOps-ML-Secret": SECRET}
     assert client.post("/v1/detect", json={"series": "nope"}, headers=headers).status_code == 422
     big = {"series": [{"key": "k" * 300, "metric": "request_rate",
-                       "points": [{"t": "2026-11-23T10:00:00Z", "v": 1.0}] * 200}]}
+                       "points": [{"t": "2026-11-23T10:00:00Z", "v": 1.0}] * 600}]}   # ~22 KB > 10 KB limit
     assert client.post("/v1/detect", json=big, headers=headers).status_code == 413
+
+
+def test_chunked_bodies_without_content_length_are_limited_too(client):
+    headers = {"X-PulseOps-ML-Secret": SECRET, "Content-Type": "application/json"}
+
+    def chunks():
+        yield b'{"series": ['
+        for _ in range(2_000):
+            yield b'{"key": "k", "metric": "request_rate", "points": []},'
+        yield b'{"key": "k", "metric": "request_rate", "points": []}]}'
+
+    assert client.post("/v1/detect", content=chunks(), headers=headers).status_code == 413
 
 
 def test_insecure_settings_are_refused_without_opt_in(monkeypatch):

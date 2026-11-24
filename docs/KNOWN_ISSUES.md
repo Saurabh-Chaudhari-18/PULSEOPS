@@ -35,3 +35,4 @@
 | 31 | Anomaly detection | No daily/weekly seasonality: a normal traffic pattern change (e.g. office hours) can produce request-rate findings; a problem that persists for more than ~90 minutes gradually becomes the baseline and stops being reported. | OPEN — revisit with seasonal baselines once history exists |
 | 32 | Anomaly detection | The detection job runs in every backend instance; with several instances findings are merged idempotently but `occurrences` is over-counted. Use one instance or add a database advisory lock before scaling out. | OPEN (Phase 18) |
 | 33 | Anomaly detection | When the ML service is unreachable nothing is detected; this is visible in `GET /anomalies/detection-status` and the log, but not yet alerted on. | OPEN (Phase 15) |
+| 34 | ML service tests | Starlette now warns that its `TestClient` will move from `httpx` to `httpx2`; tests pass with `httpx` today. | WATCH — switch the dev dependency when Starlette requires it |

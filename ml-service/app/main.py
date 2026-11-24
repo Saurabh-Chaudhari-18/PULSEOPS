@@ -10,11 +10,11 @@ from __future__ import annotations
 import hmac
 import logging
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Header, HTTPException
 
 from . import __version__, service
 from .config import Settings
+from .limits import BodyLimitMiddleware
 from .schemas import DetectRequest, DetectResponse
 
 log = logging.getLogger("pulseops.ml")
@@ -27,12 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="PulseOps ML service", version=__version__, docs_url=None, redoc_url=None,
                   openapi_url=None)
 
-    @app.middleware("http")
-    async def limit_body(request: Request, call_next):
-        length = request.headers.get("content-length")
-        if length is not None and (not length.isdigit() or int(length) > settings.max_body_bytes):
-            return JSONResponse({"detail": "request body too large"}, status_code=413)
-        return await call_next(request)
+    app.add_middleware(BodyLimitMiddleware, max_bytes=settings.max_body_bytes)
 
     def authenticate(x_pulseops_ml_secret: str | None = Header(default=None)) -> None:
         if settings.allow_insecure:
