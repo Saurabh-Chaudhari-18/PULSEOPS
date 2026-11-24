@@ -271,3 +271,14 @@ Last updated: 2026-11-21 (Phases 3–6 completed)
 **Final PC results (2026-11-24):** backend **257/257 passed** (incl. `IncidentRulesTest`, `IncidentServiceParamsTest` and journey step 10, which exercises automatic resolution end to end against PostgreSQL); ML service **31/31 passed** with the pool-utilisation floor. Automatic resolution after the live fault was switched off was not separately observed on the PC; it is covered by the journey test and will be seen again in the frontend work.
 
 **Next:** frontend for Phases 1–13 (in parts), then Phase 14 (root-cause analysis).
+
+## Frontend part 1 — App shell, accounts, organizations, projects, services, onboarding — CODE COMPLETE, awaiting PC run (2026-11-24)
+
+**Completed (code), ADR-026:**
+- Foundation: Vite config (proxy via `PULSEOPS_BACKEND_URL`), design tokens/theme, bundled IBM Plex fonts, API client (in-memory token, shared refresh, retry once, typed errors with field messages), auth context (session restore on load, offline state), route guards, app layout (sidebar by permission, organization switcher, account menu, responsive drawer).
+- Screens: sign in (incl. unverified-email resend), create account (local password rules mirror the backend; verification-pending state), forgot/reset password, verify email; first-organization setup; projects list (search, active/archived, connection summary) and create; project page (services with connection status, integration keys with create-once/revoke, archive/restore/delete with typed confirmation); service page with a four-step connection guide (method, key, instructions from the backend, live verification polling every 5 s) plus ingestion on/off and archive; team (roles with descriptions, add, change role, remove, leave — owner-only rules respected in the UI); account settings (name, password change, sign out everywhere).
+
+**Tests executed (cloud):**
+- ✅ TypeScript strict check of all sources against generated stubs of the libraries (React hooks and TanStack Query typed precisely, so result narrowing and data flow are checked; MUI/router props are not).
+- ✅ 10 unit tests (Vitest specs, run in Node with a shim): token sent; refresh-and-retry once; one shared refresh for concurrent 401s; failed refresh signs out and surfaces the original error; field errors; unreachable server reported as NETWORK without signing out; 204 handling and query building; time formatting; connection states; password rules.
+- ⏳ On the PC: `npm install`, `npm run typecheck`, `npm test`, `npm run dev`, and a walk through the screens against the running backend.

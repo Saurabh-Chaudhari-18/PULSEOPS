@@ -51,6 +51,10 @@ npm install
 npm run dev        # http://localhost:5173, proxies /api → :8080
 ```
 
+The dev server proxies `/api` to the backend, so the browser sees one origin (no CORS; the refresh cookie works). If the backend is not on 8080, set `PULSEOPS_BACKEND_URL` first — PowerShell: `$env:PULSEOPS_BACKEND_URL = "http://localhost:18080"`. Links in verification/reset emails use `PULSEOPS_PUBLIC_URL` (default `http://localhost:5173`).
+
+Other scripts: `npm test` (Vitest), `npm run typecheck` (TypeScript), `npm run build` (type-check + production bundle in `dist/`). Commit `package-lock.json` after the first install so later installs are reproducible.
+
 ## Tests
 
 | Component | Command |
